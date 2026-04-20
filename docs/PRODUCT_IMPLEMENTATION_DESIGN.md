@@ -13,6 +13,19 @@ This document is not a replay of the PoC design. It is the first product design 
 - which PoC truths are now fixed inputs
 - where controller, placement, catalog, and backend boundaries should sit
 
+This document is the top-level product design overview.
+The detailed follow-up documents are:
+
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
+- [API_OBJECT_MODEL.md](API_OBJECT_MODEL.md)
+- [STATE_AND_STATUS_MODEL.md](STATE_AND_STATUS_MODEL.md)
+- [PLACEMENT_AND_FALLBACK_POLICY.md](PLACEMENT_AND_FALLBACK_POLICY.md)
+- [RETRY_AND_RECOVERY_POLICY.md](RETRY_AND_RECOVERY_POLICY.md)
+- [OBSERVABILITY_MODEL.md](OBSERVABILITY_MODEL.md)
+- [CRD_INTRODUCTION_STRATEGY.md](CRD_INTRODUCTION_STRATEGY.md)
+- [DRAGONFLY_ADAPTER_SPEC.md](DRAGONFLY_ADAPTER_SPEC.md)
+
 ## 2. Source Of Truth For This Design
 
 This repository explicitly uses `artifact-handoff-poc` as its primary validation reference.
@@ -376,3 +389,9 @@ The next direct step after this document is to define:
 2. the minimum domain types
 3. the first executable scaffold under `cmd/`
 
+At the current repository stage, the more immediate documentation steps are:
+
+1. architecture boundary hardening
+2. domain-model hardening
+3. placement and fallback policy hardening
+4. Dragonfly adapter boundary hardening

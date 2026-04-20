@@ -1,5 +1,8 @@
 # artifact-handoff
 
+English: [README.md](README.md)
+한국어: [README.ko.md](README.ko.md)
+
 `artifact-handoff` is the product-oriented successor to `artifact-handoff-poc`.
 
 This repository exists to turn the validated ideas from `artifact-handoff-poc` into a real Go-based Kubernetes project with product-owned control-plane semantics for locality-aware artifact handoff.
@@ -59,7 +62,38 @@ The first implementation phase should establish:
 
 The primary starting point is:
 
-- [docs/PRODUCT_IMPLEMENTATION_DESIGN.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.md)
+- English: [docs/PRODUCT_IMPLEMENTATION_DESIGN.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.md)
+- Korean: [docs/PRODUCT_IMPLEMENTATION_DESIGN.ko.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.ko.md)
+
+Supporting design documents:
+
+- Architecture
+  - English: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+  - Korean: [docs/ARCHITECTURE.ko.md](docs/ARCHITECTURE.ko.md)
+- Domain Model
+  - English: [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md)
+  - Korean: [docs/DOMAIN_MODEL.ko.md](docs/DOMAIN_MODEL.ko.md)
+- API Object Model
+  - English: [docs/API_OBJECT_MODEL.md](docs/API_OBJECT_MODEL.md)
+  - Korean: [docs/API_OBJECT_MODEL.ko.md](docs/API_OBJECT_MODEL.ko.md)
+- State And Status Model
+  - English: [docs/STATE_AND_STATUS_MODEL.md](docs/STATE_AND_STATUS_MODEL.md)
+  - Korean: [docs/STATE_AND_STATUS_MODEL.ko.md](docs/STATE_AND_STATUS_MODEL.ko.md)
+- Placement And Fallback Policy
+  - English: [docs/PLACEMENT_AND_FALLBACK_POLICY.md](docs/PLACEMENT_AND_FALLBACK_POLICY.md)
+  - Korean: [docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md](docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md)
+- Retry And Recovery Policy
+  - English: [docs/RETRY_AND_RECOVERY_POLICY.md](docs/RETRY_AND_RECOVERY_POLICY.md)
+  - Korean: [docs/RETRY_AND_RECOVERY_POLICY.ko.md](docs/RETRY_AND_RECOVERY_POLICY.ko.md)
+- Observability Model
+  - English: [docs/OBSERVABILITY_MODEL.md](docs/OBSERVABILITY_MODEL.md)
+  - Korean: [docs/OBSERVABILITY_MODEL.ko.md](docs/OBSERVABILITY_MODEL.ko.md)
+- CRD Introduction Strategy
+  - English: [docs/CRD_INTRODUCTION_STRATEGY.md](docs/CRD_INTRODUCTION_STRATEGY.md)
+  - Korean: [docs/CRD_INTRODUCTION_STRATEGY.ko.md](docs/CRD_INTRODUCTION_STRATEGY.ko.md)
+- Dragonfly Adapter Spec
+  - English: [docs/DRAGONFLY_ADAPTER_SPEC.md](docs/DRAGONFLY_ADAPTER_SPEC.md)
+  - Korean: [docs/DRAGONFLY_ADAPTER_SPEC.ko.md](docs/DRAGONFLY_ADAPTER_SPEC.ko.md)
 
 ## Relationship To `artifact-handoff-poc`
 
@@ -88,3 +122,4 @@ What is intentionally re-designed here:
 
 This repository is in the initial design-and-scaffold phase.
 
+The current focus is strengthening product design documentation before meaningful implementation begins.
