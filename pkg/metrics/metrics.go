@@ -27,10 +27,26 @@ func (r *Registry) IncCounter(name string) {
 	r.counters[name]++
 }
 
+func (r *Registry) EnsureCounter(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.counters[name]; !ok {
+		r.counters[name] = 0
+	}
+}
+
 func (r *Registry) SetGauge(name string, value float64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.gauges[name] = value
+}
+
+func (r *Registry) EnsureGauge(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.gauges[name]; !ok {
+		r.gauges[name] = 0
+	}
 }
 
 func (r *Registry) Handler() http.Handler {

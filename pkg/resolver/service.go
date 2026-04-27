@@ -19,10 +19,19 @@ type Service struct {
 }
 
 func NewService(store inventory.Store) *Service {
+	reg := metrics.NewRegistry()
+	for _, name := range []string{
+		"ah_artifacts_registered_total",
+		"ah_resolve_requests_total",
+		"ah_fallback_total",
+	} {
+		reg.EnsureCounter(name)
+	}
+	reg.EnsureGauge("ah_gc_backlog_bytes")
 	return &Service{
 		store:                 store,
 		now:                   func() time.Time { return time.Now().UTC() },
-		metrics:               metrics.NewRegistry(),
+		metrics:               reg,
 		minRetention:          15 * time.Minute,
 		retentionPolicySource: "service_default",
 	}

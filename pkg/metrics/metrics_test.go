@@ -22,3 +22,17 @@ func TestRegistryRender(t *testing.T) {
 		t.Fatalf("missing gauge in render: %s", rendered)
 	}
 }
+
+func TestRegistryRenderZeroInitializedMetrics(t *testing.T) {
+	reg := NewRegistry()
+	reg.EnsureCounter("ah_resolve_requests_total")
+	reg.EnsureGauge("ah_gc_backlog_bytes")
+
+	rendered := reg.Render()
+	if !strings.Contains(rendered, "ah_resolve_requests_total 0") {
+		t.Fatalf("missing zero-valued counter in render: %s", rendered)
+	}
+	if !strings.Contains(rendered, "ah_gc_backlog_bytes 0") {
+		t.Fatalf("missing zero-valued gauge in render: %s", rendered)
+	}
+}
