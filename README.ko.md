@@ -2,7 +2,7 @@
 
 `artifact-handoff`는 `artifact-handoff-poc`의 제품 지향 후속 저장소다.
 
-이 저장소는 `artifact-handoff-poc`에서 검증한 아이디어를 바탕으로, locality-aware artifact handoff를 위한 product-owned control-plane semantics를 갖는 실제 Go 기반 Kubernetes 프로젝트로 확장하기 위해 존재한다.
+이 저장소는 `artifact-handoff-poc`에서 검증한 아이디어를 바탕으로, locality-aware artifact handoff를 위한 product-owned resolver semantics를 갖는 실제 Go 기반 Kubernetes 프로젝트로 확장하기 위해 존재한다.
 
 참고 저장소:
 
@@ -30,7 +30,7 @@
 
 현재 의도하는 방향은 다음과 같다.
 
-- Go 기반 Kubernetes-native control plane
+- Kubernetes batch integration을 위한 Go 기반 resolver service
 - product-owned artifact semantics
 - producer locality와 remote-capable fallback을 함께 읽는 placement resolution
 - 교체 가능한 transport/cache backend
@@ -50,7 +50,7 @@
 첫 구현 단계는 다음을 먼저 세워야 한다.
 
 1. 제품 용어와 API 경계
-2. placement-resolution architecture
+2. resolver-service architecture
 3. backend adapter 경계
 4. 최소 Go 프로젝트 레이아웃
 5. PoC 검증 결과에서 제품 구현으로 넘어가는 migration path
@@ -70,27 +70,16 @@
 - Domain Model
   - 영문: [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md)
   - 한글: [docs/DOMAIN_MODEL.ko.md](docs/DOMAIN_MODEL.ko.md)
-- API Object Model
-  - 영문: [docs/API_OBJECT_MODEL.md](docs/API_OBJECT_MODEL.md)
-  - 한글: [docs/API_OBJECT_MODEL.ko.md](docs/API_OBJECT_MODEL.ko.md)
-- State And Status Model
-  - 영문: [docs/STATE_AND_STATUS_MODEL.md](docs/STATE_AND_STATUS_MODEL.md)
-  - 한글: [docs/STATE_AND_STATUS_MODEL.ko.md](docs/STATE_AND_STATUS_MODEL.ko.md)
 - Placement And Fallback Policy
   - 영문: [docs/PLACEMENT_AND_FALLBACK_POLICY.md](docs/PLACEMENT_AND_FALLBACK_POLICY.md)
   - 한글: [docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md](docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md)
-- Retry And Recovery Policy
-  - 영문: [docs/RETRY_AND_RECOVERY_POLICY.md](docs/RETRY_AND_RECOVERY_POLICY.md)
-  - 한글: [docs/RETRY_AND_RECOVERY_POLICY.ko.md](docs/RETRY_AND_RECOVERY_POLICY.ko.md)
-- Observability Model
-  - 영문: [docs/OBSERVABILITY_MODEL.md](docs/OBSERVABILITY_MODEL.md)
-  - 한글: [docs/OBSERVABILITY_MODEL.ko.md](docs/OBSERVABILITY_MODEL.ko.md)
-- CRD Introduction Strategy
-  - 영문: [docs/CRD_INTRODUCTION_STRATEGY.md](docs/CRD_INTRODUCTION_STRATEGY.md)
-  - 한글: [docs/CRD_INTRODUCTION_STRATEGY.ko.md](docs/CRD_INTRODUCTION_STRATEGY.ko.md)
 - Dragonfly Adapter Spec
   - 영문: [docs/DRAGONFLY_ADAPTER_SPEC.md](docs/DRAGONFLY_ADAPTER_SPEC.md)
   - 한글: [docs/DRAGONFLY_ADAPTER_SPEC.ko.md](docs/DRAGONFLY_ADAPTER_SPEC.ko.md)
+
+Deprecated 문서군:
+
+- resolver service 기준선과 충돌하는 오래된 문서는 [`docs/deprecated/`](docs/deprecated/) 아래로 이동했다
 
 ## `artifact-handoff-poc`와의 관계
 
@@ -109,7 +98,7 @@
 이 저장소에서 다시 설계하는 것:
 
 - product-owned API와 object model
-- controller architecture
+- resolver-service architecture
 - placement-resolution ownership
 - retry와 fallback 정책
 - durable metadata/store choices
@@ -119,4 +108,14 @@
 
 이 저장소는 현재 initial design-and-scaffold phase에 있다.
 
-현재의 우선순위는 의미 있는 구현을 시작하기 전에 제품 설계 문서를 더 단단하게 만드는 것이다.
+현재 구현 우선순위는 다음과 같다.
+
+- Phase 1 resolver contract scaffold
+- proto 기반 RPC 경계 초안
+- in-memory inventory/store
+- happy-path `RegisterArtifact`, `ResolveHandoff`, `NotifyNodeTerminal`
+- sample-run lifecycle hook `FinalizeSampleRun`, `EvaluateGC`
+
+현재 진입점:
+
+- resolver binary: `cmd/artifact-handoff-resolver`

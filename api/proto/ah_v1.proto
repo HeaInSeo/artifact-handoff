@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package ah.v1;
+
+option go_package = "github.com/HeaInSeo/artifact-handoff/api/proto/ahv1";
+
+message ArtifactRef {
+  string sample_run_id = 1;
+  string producer_node_id = 2;
+  string output_name = 3;
+  string artifact_id = 4;
+  string digest = 5;
+  string node_name = 6;
+  string uri = 7;
+}
+
+message RegisterArtifactRequest {
+  ArtifactRef artifact = 1;
+}
+
+message RegisterArtifactResponse {
+  string availability_state = 1;
+}
+
+message ArtifactBinding {
+  string binding_name = 1;
+  string sample_run_id = 2;
+  string child_node_id = 3;
+  string child_input_name = 4;
+  string producer_node_id = 5;
+  string producer_output_name = 6;
+  string consume_policy = 7;
+  bool required = 8;
+  string expected_digest = 9;
+  string artifact_id = 10;
+}
+
+message ResolveHandoffRequest {
+  ArtifactBinding binding = 1;
+  string target_node_name = 2;
+}
+
+message ResolveHandoffResponse {
+  string resolution_status = 1;
+  string decision = 2;
+  string source_node_name = 3;
+  string artifact_uri = 4;
+  bool requires_materialization = 5;
+}
+
+message NotifyNodeTerminalRequest {
+  string sample_run_id = 1;
+  string node_id = 2;
+  string terminal_state = 3;
+}
+
+message NotifyNodeTerminalResponse {
+  bool accepted = 1;
+}
+
+message FinalizeSampleRunRequest {
+  string sample_run_id = 1;
+}
+
+message FinalizeSampleRunResponse {
+  bool accepted = 1;
+}
+
+message EvaluateGCRequest {
+  string sample_run_id = 1;
+}
+
+message EvaluateGCResponse {
+  bool accepted = 1;
+}
+
+message GetSampleRunLifecycleRequest {
+  string sample_run_id = 1;
+}
+
+message GetSampleRunLifecycleResponse {
+  string sample_run_id = 1;
+  bool finalized = 2;
+  string finalized_at = 3;
+  string retention_policy_source = 4;
+  string retention_duration = 5;
+  string retention_until = 6;
+  bool gc_eligible = 7;
+  string gc_eligible_at = 8;
+  string gc_blocked_reason = 9;
+  int32 terminal_node_count = 10;
+  int32 succeeded_node_count = 11;
+  int32 failed_node_count = 12;
+  int32 canceled_node_count = 13;
+  int32 retained_artifact_count = 14;
+}
+
+service ArtifactHandoffResolver {
+  rpc RegisterArtifact(RegisterArtifactRequest) returns (RegisterArtifactResponse);
+  rpc ResolveHandoff(ResolveHandoffRequest) returns (ResolveHandoffResponse);
+  rpc NotifyNodeTerminal(NotifyNodeTerminalRequest) returns (NotifyNodeTerminalResponse);
+  rpc FinalizeSampleRun(FinalizeSampleRunRequest) returns (FinalizeSampleRunResponse);
+  rpc EvaluateGC(EvaluateGCRequest) returns (EvaluateGCResponse);
+  rpc GetSampleRunLifecycle(GetSampleRunLifecycleRequest) returns (GetSampleRunLifecycleResponse);
+}

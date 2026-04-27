@@ -24,6 +24,7 @@ Related documents:
 ## 2. Architectural Position
 
 `artifact-handoff` should be built as a Kubernetes-native control-plane project.
+`artifact-handoff` should be built as a long-lived resolver service for Kubernetes batch integrations.
 
 It is not:
 
@@ -55,7 +56,7 @@ The following facts from `artifact-handoff-poc` drive the architecture:
 The architecture should be divided into the following top-level subsystems:
 
 1. API and domain layer
-2. controller layer
+2. resolver-service layer
 3. placement-resolution layer
 4. metadata layer
 5. backend adapter layer
@@ -79,20 +80,20 @@ This layer must not leak:
 - raw Kubernetes scheduling details as the only product vocabulary
 - backend-specific transfer semantics
 
-## 6. Controller Layer
+## 6. Resolver-Service Layer
 
-The controller layer is the primary orchestrator.
+The resolver-service layer is the primary orchestrator.
 
 Responsibilities:
 
-- reconcile product state transitions
+- handle product state transitions
 - interpret artifact and workload intent
 - invoke placement resolution
 - invoke backend operations
 - update product status
 - own downgrade and fallback entry logic
 
-The controller layer should not:
+The resolver-service layer should not:
 
 - embed transport backend logic directly
 - become a storage engine
@@ -171,7 +172,7 @@ It is a translation boundary, not the owner of product semantics.
 
 This layer should eventually expose:
 
-- controller events
+- resolver events
 - artifact status transitions
 - placement decisions
 - backend operation outcomes
@@ -255,4 +256,3 @@ The current architectural decision is:
 - the control plane owns artifact semantics, placement resolution, and fallback entry logic
 - backends, including Dragonfly, sit behind adapter boundaries
 - runtime object mutation is a translation layer, not the core product
-

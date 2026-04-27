@@ -5,7 +5,7 @@ English: [README.md](README.md)
 
 `artifact-handoff` is the product-oriented successor to `artifact-handoff-poc`.
 
-This repository exists to turn the validated ideas from `artifact-handoff-poc` into a real Go-based Kubernetes project with product-owned control-plane semantics for locality-aware artifact handoff.
+This repository exists to turn the validated ideas from `artifact-handoff-poc` into a real Go-based Kubernetes project with product-owned resolver semantics for locality-aware artifact handoff.
 
 Reference repository:
 
@@ -33,7 +33,7 @@ This repository exists to build the actual product path on top of those validate
 
 The current intended direction is:
 
-- Go-based Kubernetes-native control plane
+- Go-based resolver service for Kubernetes batch integrations
 - product-owned artifact semantics
 - placement resolution that is aware of producer locality and remote-capable fallback
 - replaceable transport/cache backends
@@ -53,7 +53,7 @@ At the current stage, this repository is not trying to:
 The first implementation phase should establish:
 
 1. product vocabulary and API boundaries
-2. placement-resolution architecture
+2. resolver-service architecture
 3. backend adapter boundaries
 4. a minimum Go project layout
 5. a migration path from PoC validation into product implementation
@@ -73,27 +73,16 @@ Supporting design documents:
 - Domain Model
   - English: [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md)
   - Korean: [docs/DOMAIN_MODEL.ko.md](docs/DOMAIN_MODEL.ko.md)
-- API Object Model
-  - English: [docs/API_OBJECT_MODEL.md](docs/API_OBJECT_MODEL.md)
-  - Korean: [docs/API_OBJECT_MODEL.ko.md](docs/API_OBJECT_MODEL.ko.md)
-- State And Status Model
-  - English: [docs/STATE_AND_STATUS_MODEL.md](docs/STATE_AND_STATUS_MODEL.md)
-  - Korean: [docs/STATE_AND_STATUS_MODEL.ko.md](docs/STATE_AND_STATUS_MODEL.ko.md)
 - Placement And Fallback Policy
   - English: [docs/PLACEMENT_AND_FALLBACK_POLICY.md](docs/PLACEMENT_AND_FALLBACK_POLICY.md)
   - Korean: [docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md](docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md)
-- Retry And Recovery Policy
-  - English: [docs/RETRY_AND_RECOVERY_POLICY.md](docs/RETRY_AND_RECOVERY_POLICY.md)
-  - Korean: [docs/RETRY_AND_RECOVERY_POLICY.ko.md](docs/RETRY_AND_RECOVERY_POLICY.ko.md)
-- Observability Model
-  - English: [docs/OBSERVABILITY_MODEL.md](docs/OBSERVABILITY_MODEL.md)
-  - Korean: [docs/OBSERVABILITY_MODEL.ko.md](docs/OBSERVABILITY_MODEL.ko.md)
-- CRD Introduction Strategy
-  - English: [docs/CRD_INTRODUCTION_STRATEGY.md](docs/CRD_INTRODUCTION_STRATEGY.md)
-  - Korean: [docs/CRD_INTRODUCTION_STRATEGY.ko.md](docs/CRD_INTRODUCTION_STRATEGY.ko.md)
 - Dragonfly Adapter Spec
   - English: [docs/DRAGONFLY_ADAPTER_SPEC.md](docs/DRAGONFLY_ADAPTER_SPEC.md)
   - Korean: [docs/DRAGONFLY_ADAPTER_SPEC.ko.md](docs/DRAGONFLY_ADAPTER_SPEC.ko.md)
+
+Deprecated document set:
+
+- older pre-resolver or controller-biased documents were moved under [`docs/deprecated/`](docs/deprecated/)
 
 ## Relationship To `artifact-handoff-poc`
 
@@ -112,7 +101,7 @@ What is inherited as validated input:
 What is intentionally re-designed here:
 
 - product-owned API and object model
-- controller architecture
+- resolver-service architecture
 - placement-resolution ownership
 - retry and fallback policy
 - durable metadata/store choices
@@ -122,4 +111,14 @@ What is intentionally re-designed here:
 
 This repository is in the initial design-and-scaffold phase.
 
-The current focus is strengthening product design documentation before meaningful implementation begins.
+Current implementation focus:
+
+- Phase 1 resolver contract scaffold
+- proto-first RPC boundary definition
+- in-memory inventory/store
+- happy-path `RegisterArtifact`, `ResolveHandoff`, `NotifyNodeTerminal`
+- sample-run lifecycle hooks `FinalizeSampleRun`, `EvaluateGC`
+
+Current entrypoints:
+
+- resolver binary: `cmd/artifact-handoff-resolver`

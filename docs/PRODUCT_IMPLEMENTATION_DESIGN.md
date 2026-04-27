@@ -11,7 +11,7 @@ This document is not a replay of the PoC design. It is the first product design 
 - what the product should own
 - what the product should not own
 - which PoC truths are now fixed inputs
-- where controller, placement, catalog, and backend boundaries should sit
+- where resolver, placement, catalog, and backend boundaries should sit
 
 This document is the top-level product design overview.
 The detailed follow-up documents are:
@@ -60,10 +60,10 @@ It is a product-owned artifact handoff and placement-resolution problem.
 The first-phase goals are:
 
 1. define a product-owned metadata and policy model
-2. define a controller-owned placement resolution path
+2. define a resolver-owned placement resolution path
 3. define a backend abstraction that can support both simple local implementations and Dragonfly later
 4. define a failure model that preserves the PoC's useful distinctions
-5. establish a Kubernetes-native Go architecture that can evolve beyond script-assisted validation
+5. establish a Go-based resolver-service architecture that can evolve beyond script-assisted validation
 
 ## 5. Non-Goals
 
@@ -95,7 +95,7 @@ These semantics must remain product-owned even if the actual artifact bytes late
 The initial product shape should have four major areas:
 
 1. API and object model
-2. controller and placement resolution
+2. resolver service and placement resolution
 3. metadata and state services
 4. backend adapters
 
@@ -190,18 +190,18 @@ Minimum fields:
 - `PreferredNodeAffinity`
 - `Reason`
 
-## 10. Controller Responsibilities
+## 10. Resolver Responsibilities
 
-The product controller layer should own:
+The product resolver service should own:
 
-- artifact registration reconciliation
+- artifact registration handling
 - artifact status updates
 - placement resolution
 - downgrade judgment from same-node-required toward remote-capable paths
 - backend orchestration requests
 - artifact availability status transitions
 
-The controller layer should not directly become the transport implementation.
+The resolver service should not directly become the transport implementation.
 
 ## 11. Placement Resolution Path
 
@@ -303,11 +303,11 @@ Initial layout:
 ```text
 .
 ├── cmd/
-│   └── artifact-handoff-controller/
+│   └── artifact-handoff-resolver/
 ├── docs/
 ├── internal/
 │   ├── api/
-│   ├── controller/
+│   ├── resolver/
 │   ├── placement/
 │   ├── backend/
 │   ├── catalog/
@@ -318,7 +318,7 @@ Initial layout:
 Guidance:
 
 - `internal/api`: internal request and domain models
-- `internal/controller`: reconciliation and orchestration logic
+- `internal/resolver`: request handling and orchestration logic
 - `internal/placement`: placement resolution logic
 - `internal/backend`: backend abstractions and adapters
 - `internal/catalog`: metadata access and persistence boundaries
@@ -342,11 +342,11 @@ This layout is intentionally small and should expand only when implementation pr
 - placement-resolution interfaces
 - backend interfaces
 
-### Phase 3. Basic controller path
+### Phase 3. Basic resolver path
 
 - artifact registration flow
 - initial placement-resolution path
-- status update loop
+- status update path
 
 ### Phase 4. First backend
 
@@ -376,7 +376,7 @@ The initial implementation decision is:
 
 - repository name: `artifact-handoff`
 - language: Go
-- product type: Kubernetes-native control-plane project
+- product type: long-lived resolver service for Kubernetes batch integrations
 - PoC reference: `artifact-handoff-poc`
 - backend strategy: replaceable adapters
 - Dragonfly role: backend candidate only

@@ -11,7 +11,7 @@
 - 제품이 소유해야 하는 것
 - 제품이 소유하지 않아야 하는 것
 - 어떤 PoC truth를 이제 고정 입력으로 볼 것인지
-- controller, placement, catalog, backend 경계를 어디에 둘 것인지
+- resolver, placement, catalog, backend 경계를 어디에 둘 것인지
 
 이 문서는 상위 개요 문서다.
 세부 설계는 아래 문서들에서 이어진다.
@@ -60,10 +60,10 @@ PoC가 이미 세운 최소 검증 사실은 다음과 같고, 이 설계는 이
 첫 단계 목표는 다음과 같다.
 
 1. product-owned metadata와 policy model 정의
-2. controller-owned placement resolution path 정의
+2. resolver-owned placement resolution path 정의
 3. simple local implementation과 Dragonfly를 모두 지원할 수 있는 backend abstraction 정의
 4. PoC가 보여준 유용한 구분을 보존하는 failure model 정의
-5. script-assisted validation을 넘어서 확장 가능한 Kubernetes-native Go architecture 수립
+5. script-assisted validation을 넘어서 확장 가능한 Go 기반 resolver-service architecture 수립
 
 ## 5. 비목표
 
@@ -95,7 +95,7 @@ PoC가 이미 세운 최소 검증 사실은 다음과 같고, 이 설계는 이
 초기 제품 shape는 네 가지 큰 영역을 가져야 한다.
 
 1. API와 object model
-2. controller와 placement resolution
+2. resolver service와 placement resolution
 3. metadata 및 state services
 4. backend adapters
 
@@ -190,18 +190,18 @@ Pod 또는 Job spec에 merge할 수 있는 concrete placement output이다.
 - `PreferredNodeAffinity`
 - `Reason`
 
-## 10. Controller 책임
+## 10. Resolver 책임
 
-제품 controller layer는 다음을 소유해야 한다.
+제품 resolver service는 다음을 소유해야 한다.
 
-- artifact registration reconciliation
+- artifact registration 처리
 - artifact status updates
 - placement resolution
 - same-node-required에서 remote-capable path로 가는 downgrade judgment
 - backend orchestration request
 - artifact availability status transition
 
-Controller layer가 transport implementation 자체가 되면 안 된다.
+Resolver service가 transport implementation 자체가 되면 안 된다.
 
 ## 11. Placement resolution path
 
@@ -303,11 +303,11 @@ Dragonfly가 정의하면 안 되는 것:
 ```text
 .
 ├── cmd/
-│   └── artifact-handoff-controller/
+│   └── artifact-handoff-resolver/
 ├── docs/
 ├── internal/
 │   ├── api/
-│   ├── controller/
+│   ├── resolver/
 │   ├── placement/
 │   ├── backend/
 │   ├── catalog/
@@ -318,7 +318,7 @@ Dragonfly가 정의하면 안 되는 것:
 가이드:
 
 - `internal/api`: 내부 요청 및 domain model
-- `internal/controller`: reconciliation 및 orchestration logic
+- `internal/resolver`: request handling 및 orchestration logic
 - `internal/placement`: placement resolution logic
 - `internal/backend`: backend abstraction 및 adapter
 - `internal/catalog`: metadata access 및 persistence boundary
@@ -342,11 +342,11 @@ Dragonfly가 정의하면 안 되는 것:
 - placement-resolution interfaces
 - backend interfaces
 
-### Phase 3. Basic controller path
+### Phase 3. Basic resolver path
 
 - artifact registration flow
 - initial placement-resolution path
-- status update loop
+- status update path
 
 ### Phase 4. First backend
 
@@ -376,7 +376,7 @@ Dragonfly가 정의하면 안 되는 것:
 
 - repository name: `artifact-handoff`
 - language: Go
-- product type: Kubernetes-native control-plane project
+- product type: Kubernetes batch integration용 long-lived resolver service
 - PoC reference: `artifact-handoff-poc`
 - backend strategy: replaceable adapters
 - Dragonfly role: backend candidate only
