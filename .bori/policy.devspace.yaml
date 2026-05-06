@@ -1,0 +1,29 @@
+# artifact-handoff kube-slint policy — devspace profile
+# 메트릭은 /metrics 엔드포인트에서 raw prometheus 이름을 그대로 사용합니다.
+# bori adapter가 smoke 전후 delta를 계산하여 slint-gate에 전달합니다.
+
+thresholds:
+  - name: "AH resolver alive"
+    metric: ah_resolve_requests_total
+    operator: ">="
+    value: 0
+
+  - name: "AH artifacts registry functional"
+    metric: ah_artifacts_registered_total
+    operator: ">="
+    value: 0
+
+  - name: "GC backlog not excessive"
+    metric: ah_gc_backlog_bytes
+    operator: "<="
+    value: 10485760
+
+regression:
+  enabled: false
+  tolerance_percent: 10
+
+reliability:
+  required: false
+
+fail_on:
+  - threshold_miss

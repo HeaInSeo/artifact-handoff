@@ -1,0 +1,53 @@
+version: v2beta1
+name: artifact-handoff
+
+vars:
+  IMAGE_REGISTRY:
+    source: env
+    default: "localhost:5000/heainseo"
+  NAMESPACE:
+    source: env
+    default: "jumi-ah-dev"
+  BORI_SMOKE_WAIT:
+    source: env
+    default: "15s"
+
+images:
+  artifact-handoff:
+    image: ${IMAGE_REGISTRY}/artifact-handoff
+    dockerfile: Containerfile
+    context: .
+
+deployments:
+  artifact-handoff:
+    kubectl:
+      kustomize: true
+      manifests:
+        - deploy/k8s/
+
+dev:
+  artifact-handoff:
+    imageSelector: ${IMAGE_REGISTRY}/artifact-handoff
+    sync:
+      - path: ./
+        excludePaths:
+          - .git/
+          - bin/
+          - deploy/
+          - "**/*_test.go"
+    ports:
+      - port: "8080:8080"
+      - port: "9090:9090"
+    logs: {}
+
+hooks:
+  - events: ["after:deploy"]
+    command: "bori-devspace"
+    args:
+      - "--profile"
+      - "devspace"
+      - "--apps-dir"
+      - ".."
+      - "--smoke-wait"
+      - "${BORI_SMOKE_WAIT}"
+      - "--v"
