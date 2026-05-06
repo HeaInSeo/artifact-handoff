@@ -23,6 +23,7 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 		OutputName:     "dataset",
 		NodeName:       "node-a",
 		URI:            "jumi://runs/run-1/nodes/producer-a/outputs/dataset",
+		SizeBytes:      2048,
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -42,6 +43,9 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	}
 	if artifact.CreatedAt.IsZero() {
 		t.Fatal("expected CreatedAt to be filled")
+	}
+	if artifact.SizeBytes != 2048 {
+		t.Fatalf("artifact.SizeBytes = %d, want 2048", artifact.SizeBytes)
 	}
 }
 
@@ -113,6 +117,154 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 	}
 }
 
+func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-digest",
+		ProducerNodeID: "parent-a",
+		OutputName:     "dataset",
+		NodeName:       "node-a",
+		URI:            "http://artifact.local/dataset",
+		Digest:         "sha256:actual",
+	})
+	if err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	_, err = service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-digest",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		Required:           true,
+		ExpectedDigest:     "sha256:expected",
+	}, "node-b")
+	if err == nil {
+		t.Fatal("resolve handoff error = nil, want digest mismatch error")
+	}
+}
+
+func TestResolveHandoffReturnsPendingWhenProducerNotTerminalAndArtifactMissing(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-pending",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		Required:           true,
+	}, "node-b")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusPending {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusPending)
+	}
+	if resolved.Decision != domain.ResolutionDecisionUnavailable {
+		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionUnavailable)
+	}
+}
+
+func TestResolveHandoffReturnsMissingWhenProducerSucceededButArtifactMissing(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-missing", "parent-a", "Succeeded"); err != nil {
+		t.Fatalf("notify terminal: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-missing",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		Required:           true,
+	}, "node-b")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusMissing {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusMissing)
+	}
+	if resolved.Decision != domain.ResolutionDecisionUnavailable {
+		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionUnavailable)
+	}
+}
+
+func TestResolveHandoffReturnsProducerFailedWhenProducerFailedAndArtifactMissing(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-producer-failed", "parent-a", "Failed"); err != nil {
+		t.Fatalf("notify terminal: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-producer-failed",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		Required:           true,
+	}, "node-b")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusMissing {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusMissing)
+	}
+	if resolved.Decision != domain.ResolutionDecisionProducerFailed {
+		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionProducerFailed)
+	}
+}
+
+func TestResolveHandoffReturnsMissingWhenSampleAlreadyGCEligible(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return baseNow }
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-gc",
+		ProducerNodeID: "parent-a",
+		OutputName:     "dataset",
+		NodeName:       "node-a",
+		URI:            "http://artifact.local/dataset",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-gc", "parent-a", "Succeeded"); err != nil {
+		t.Fatalf("notify terminal: %v", err)
+	}
+	if err := service.FinalizeSampleRun(context.Background(), "sample-gc"); err != nil {
+		t.Fatalf("finalize sample run: %v", err)
+	}
+	service.now = func() time.Time { return baseNow.Add(16 * time.Minute) }
+	if err := service.EvaluateGC(context.Background(), "sample-gc"); err != nil {
+		t.Fatalf("evaluate gc: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-gc",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		Required:           true,
+	}, "node-b")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusMissing {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusMissing)
+	}
+	if resolved.Decision != domain.ResolutionDecisionUnavailable {
+		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionUnavailable)
+	}
+}
+
 func TestNotifyNodeTerminalRecordsState(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := NewService(store)
@@ -132,6 +284,15 @@ func TestNotifyNodeTerminalRecordsState(t *testing.T) {
 	}
 }
 
+func TestNotifyNodeTerminalRejectsUnsupportedState(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "Running"); err == nil {
+		t.Fatal("expected unsupported terminal state to fail")
+	}
+}
+
 func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := NewService(store)
@@ -141,6 +302,7 @@ func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 		SampleRunID:    "sample-1",
 		ProducerNodeID: "parent-a",
 		OutputName:     "dataset",
+		SizeBytes:      2048,
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -173,6 +335,9 @@ func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 	if lifecycle.RetainedArtifactCount != 1 {
 		t.Fatalf("retainedArtifactCount = %d, want 1", lifecycle.RetainedArtifactCount)
 	}
+	if lifecycle.RetainedArtifactBytes != 2048 {
+		t.Fatalf("retainedArtifactBytes = %d, want 2048", lifecycle.RetainedArtifactBytes)
+	}
 	if lifecycle.TerminalNodeCount != 1 {
 		t.Fatalf("terminalNodeCount = %d, want 1", lifecycle.TerminalNodeCount)
 	}
@@ -193,6 +358,7 @@ func TestEvaluateGCSetsEligibility(t *testing.T) {
 		SampleRunID:    "sample-1",
 		ProducerNodeID: "parent-a",
 		OutputName:     "dataset",
+		SizeBytes:      2048,
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
@@ -218,6 +384,12 @@ func TestEvaluateGCSetsEligibility(t *testing.T) {
 	}
 	if lifecycle.GCBlockedReason != "" {
 		t.Fatalf("gcBlockedReason = %q, want empty", lifecycle.GCBlockedReason)
+	}
+	if lifecycle.RetainedArtifactBytes != 2048 {
+		t.Fatalf("retainedArtifactBytes = %d, want 2048", lifecycle.RetainedArtifactBytes)
+	}
+	if rendered := service.Metrics().Render(); !strings.Contains(rendered, "ah_gc_backlog_bytes 2048") {
+		t.Fatalf("expected gc backlog gauge to reflect eligible retained artifact, got %s", rendered)
 	}
 }
 
@@ -249,6 +421,27 @@ func TestEvaluateGCBlocksWhenTerminalNodesMissing(t *testing.T) {
 	}
 	if lifecycle.GCBlockedReason != "terminal_nodes_missing" {
 		t.Fatalf("gcBlockedReason = %q, want terminal_nodes_missing", lifecycle.GCBlockedReason)
+	}
+}
+
+func TestEvaluateGCBlocksWhenSampleRunNotFinalized(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	if err := service.EvaluateGC(context.Background(), "sample-unfinalized"); err != nil {
+		t.Fatalf("evaluate gc: %v", err)
+	}
+	lifecycle, ok, err := service.GetSampleRunLifecycle(context.Background(), "sample-unfinalized")
+	if err != nil {
+		t.Fatalf("get lifecycle: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected lifecycle")
+	}
+	if lifecycle.GCEligible {
+		t.Fatal("expected gc to remain blocked when sample run is not finalized")
+	}
+	if lifecycle.GCBlockedReason != "sample_run_not_finalized" {
+		t.Fatalf("gcBlockedReason = %q, want sample_run_not_finalized", lifecycle.GCBlockedReason)
 	}
 }
 
@@ -286,6 +479,62 @@ func TestEvaluateGCBlocksWhenRetentionWindowActive(t *testing.T) {
 	}
 	if lifecycle.GCBlockedReason != "retention_window_active" {
 		t.Fatalf("gcBlockedReason = %q, want retention_window_active", lifecycle.GCBlockedReason)
+	}
+	if rendered := service.Metrics().Render(); !strings.Contains(rendered, "ah_gc_backlog_bytes 0") {
+		t.Fatalf("expected gc backlog gauge to stay zero while blocked, got %s", rendered)
+	}
+}
+
+func TestEvaluateGCRefreshesStaleLifecycleSnapshot(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return baseNow }
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-stale",
+		ProducerNodeID: "parent-a",
+		OutputName:     "dataset",
+		SizeBytes:      3072,
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-stale", "parent-a", "Succeeded"); err != nil {
+		t.Fatalf("notify terminal: %v", err)
+	}
+	stale := domain.SampleRunLifecycle{
+		SampleRunID:           "sample-stale",
+		Finalized:             true,
+		RetentionPolicySource: "stale",
+		RetentionDuration:     15 * time.Minute,
+		RetentionUntil:        timePtr(baseNow.Add(15 * time.Minute)),
+		RetainedArtifactCount: 0,
+		TerminalNodeCount:     0,
+	}
+	if err := store.UpsertSampleRunLifecycle(context.Background(), stale); err != nil {
+		t.Fatalf("upsert stale lifecycle: %v", err)
+	}
+	service.now = func() time.Time { return baseNow.Add(16 * time.Minute) }
+	if err := service.EvaluateGC(context.Background(), "sample-stale"); err != nil {
+		t.Fatalf("evaluate gc: %v", err)
+	}
+	lifecycle, ok, err := service.GetSampleRunLifecycle(context.Background(), "sample-stale")
+	if err != nil {
+		t.Fatalf("get lifecycle: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected lifecycle")
+	}
+	if lifecycle.RetainedArtifactCount != 1 {
+		t.Fatalf("retainedArtifactCount = %d, want 1", lifecycle.RetainedArtifactCount)
+	}
+	if lifecycle.RetainedArtifactBytes != 3072 {
+		t.Fatalf("retainedArtifactBytes = %d, want 3072", lifecycle.RetainedArtifactBytes)
+	}
+	if lifecycle.TerminalNodeCount != 1 {
+		t.Fatalf("terminalNodeCount = %d, want 1", lifecycle.TerminalNodeCount)
+	}
+	if !lifecycle.GCEligible {
+		t.Fatal("expected gc eligibility after refreshed snapshot")
 	}
 }
 
@@ -349,6 +598,108 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 	if artifact.ArtifactID != "sample-http-env:producer-a:result.json" {
 		t.Fatalf("artifactId = %q, want sample-http-env:producer-a:result.json", artifact.ArtifactID)
 	}
+}
+
+func TestHTTPGetArtifact(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	handler := NewHTTPHandler(service)
+
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-http-get",
+		ProducerNodeID: "producer-a",
+		OutputName:     "report",
+		ArtifactID:     "sample-http-get:producer-a:report",
+		Digest:         "sha256:abc123",
+		NodeName:       "node-a",
+		URI:            "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
+		SizeBytes:      4096,
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=sample-http-get&producerNodeId=producer-a&outputName=report", nil)
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("get artifact status = %d, want 200", resp.Code)
+	}
+	var body struct {
+		Artifact domain.Artifact `json:"artifact"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if body.Artifact.Digest != "sha256:abc123" {
+		t.Fatalf("artifact digest = %q, want sha256:abc123", body.Artifact.Digest)
+	}
+	if body.Artifact.SizeBytes != 4096 {
+		t.Fatalf("artifact sizeBytes = %d, want 4096", body.Artifact.SizeBytes)
+	}
+}
+
+func TestHTTPGetArtifactReturnsNotFound(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	handler := NewHTTPHandler(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=missing&producerNodeId=producer-a&outputName=report", nil)
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("get artifact status = %d, want 404", resp.Code)
+	}
+}
+
+func TestHTTPListArtifactsBySampleRun(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := NewService(store)
+	handler := NewHTTPHandler(service)
+
+	for _, artifact := range []domain.Artifact{
+		{
+			SampleRunID:    "sample-http-list",
+			ProducerNodeID: "producer-a",
+			OutputName:     "report",
+			ArtifactID:     "sample-http-list:producer-a:report",
+			Digest:         "sha256:one",
+			URI:            "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
+			SizeBytes:      512,
+		},
+		{
+			SampleRunID:    "sample-http-list",
+			ProducerNodeID: "producer-b",
+			OutputName:     "metrics",
+			ArtifactID:     "sample-http-list:producer-b:metrics",
+			Digest:         "sha256:two",
+			URI:            "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
+			SizeBytes:      128,
+		},
+	} {
+		if _, err := service.RegisterArtifact(context.Background(), artifact); err != nil {
+			t.Fatalf("register artifact: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:list?sampleRunId=sample-http-list", nil)
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("list artifacts status = %d, want 200", resp.Code)
+	}
+	var body struct {
+		Artifacts []domain.Artifact `json:"artifacts"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if len(body.Artifacts) != 2 {
+		t.Fatalf("artifact count = %d, want 2", len(body.Artifacts))
+	}
+}
+
+func timePtr(v time.Time) *time.Time {
+	return &v
 }
 
 func TestHTTPFinalizeAndEvaluateGC(t *testing.T) {

@@ -13,9 +13,9 @@ const (
 type AvailabilityState string
 
 const (
-	AvailabilityStateLocalOnly  AvailabilityState = "LOCAL_ONLY"
-	AvailabilityStateBoth       AvailabilityState = "BOTH"
-	AvailabilityStateDeleted    AvailabilityState = "DELETED"
+	AvailabilityStateLocalOnly   AvailabilityState = "LOCAL_ONLY"
+	AvailabilityStateBoth        AvailabilityState = "BOTH"
+	AvailabilityStateDeleted     AvailabilityState = "DELETED"
 	AvailabilityStateUnavailable AvailabilityState = "UNAVAILABLE"
 )
 
@@ -30,9 +30,10 @@ const (
 type ResolutionDecision string
 
 const (
-	ResolutionDecisionLocalReuse   ResolutionDecision = "local_reuse"
-	ResolutionDecisionRemoteFetch  ResolutionDecision = "remote_fetch"
-	ResolutionDecisionUnavailable  ResolutionDecision = "unavailable"
+	ResolutionDecisionLocalReuse     ResolutionDecision = "local_reuse"
+	ResolutionDecisionRemoteFetch    ResolutionDecision = "remote_fetch"
+	ResolutionDecisionUnavailable    ResolutionDecision = "unavailable"
+	ResolutionDecisionProducerFailed ResolutionDecision = "producer_failed"
 )
 
 type Artifact struct {
@@ -43,6 +44,7 @@ type Artifact struct {
 	Digest         string    `json:"digest,omitempty"`
 	NodeName       string    `json:"nodeName,omitempty"`
 	URI            string    `json:"uri,omitempty"`
+	SizeBytes      int64     `json:"sizeBytes,omitempty"`
 	CreatedAt      time.Time `json:"createdAt,omitempty"`
 }
 
@@ -83,20 +85,21 @@ type NodeTerminalRecord struct {
 }
 
 type SampleRunLifecycle struct {
-	SampleRunID           string         `json:"sampleRunId"`
-	Finalized             bool           `json:"finalized"`
-	FinalizedAt           *time.Time     `json:"finalizedAt,omitempty"`
-	RetentionPolicySource string         `json:"retentionPolicySource,omitempty"`
-	RetentionDuration     time.Duration  `json:"retentionDuration,omitempty"`
-	RetentionUntil        *time.Time     `json:"retentionUntil,omitempty"`
-	GCEligible            bool           `json:"gcEligible"`
-	GCEligibleAt          *time.Time     `json:"gcEligibleAt,omitempty"`
-	GCBlockedReason       string         `json:"gcBlockedReason,omitempty"`
-	TerminalNodeCount     int            `json:"terminalNodeCount,omitempty"`
-	SucceededNodeCount    int            `json:"succeededNodeCount,omitempty"`
-	FailedNodeCount       int            `json:"failedNodeCount,omitempty"`
-	CanceledNodeCount     int            `json:"canceledNodeCount,omitempty"`
-	RetainedArtifactCount int            `json:"retainedArtifactCount,omitempty"`
+	SampleRunID           string        `json:"sampleRunId"`
+	Finalized             bool          `json:"finalized"`
+	FinalizedAt           *time.Time    `json:"finalizedAt,omitempty"`
+	RetentionPolicySource string        `json:"retentionPolicySource,omitempty"`
+	RetentionDuration     time.Duration `json:"retentionDuration,omitempty"`
+	RetentionUntil        *time.Time    `json:"retentionUntil,omitempty"`
+	GCEligible            bool          `json:"gcEligible"`
+	GCEligibleAt          *time.Time    `json:"gcEligibleAt,omitempty"`
+	GCBlockedReason       string        `json:"gcBlockedReason,omitempty"`
+	TerminalNodeCount     int           `json:"terminalNodeCount,omitempty"`
+	SucceededNodeCount    int           `json:"succeededNodeCount,omitempty"`
+	FailedNodeCount       int           `json:"failedNodeCount,omitempty"`
+	CanceledNodeCount     int           `json:"canceledNodeCount,omitempty"`
+	RetainedArtifactCount int           `json:"retainedArtifactCount,omitempty"`
+	RetainedArtifactBytes int64         `json:"retainedArtifactBytes,omitempty"`
 }
 
 func artifactKey(sampleRunID, producerNodeID, outputName string) string {

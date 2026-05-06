@@ -12,6 +12,7 @@ message ArtifactRef {
   string digest = 5;
   string node_name = 6;
   string uri = 7;
+  int64 size_bytes = 8;
 }
 
 message RegisterArtifactRequest {
@@ -93,6 +94,7 @@ message GetSampleRunLifecycleResponse {
   int32 failed_node_count = 12;
   int32 canceled_node_count = 13;
   int32 retained_artifact_count = 14;
+  int64 retained_artifact_bytes = 15;
 }
 
 service ArtifactHandoffResolver {
