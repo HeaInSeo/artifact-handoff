@@ -24,6 +24,14 @@ func NewService(store inventory.Store) *Service {
 		"ah_artifacts_registered_total",
 		"ah_resolve_requests_total",
 		"ah_fallback_total",
+		"ah_grpc_register_artifact_total",
+		"ah_grpc_register_artifact_errors_total",
+		"ah_grpc_resolve_handoff_total",
+		"ah_grpc_resolve_handoff_errors_total",
+		"ah_grpc_notify_node_terminal_total",
+		"ah_grpc_finalize_sample_run_total",
+		"ah_grpc_evaluate_gc_total",
+		"ah_grpc_get_lifecycle_total",
 	} {
 		reg.EnsureCounter(name)
 	}
