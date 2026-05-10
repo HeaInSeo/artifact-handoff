@@ -13,39 +13,26 @@ import (
 type Service struct {
 	store                 inventory.Store
 	now                   func() time.Time
-	metrics               *metrics.Registry
+	metrics               *metrics.Metrics
 	minRetention          time.Duration
 	retentionPolicySource string
 }
 
 func NewService(store inventory.Store) *Service {
-	reg := metrics.NewRegistry()
-	for _, name := range []string{
-		"ah_artifacts_registered_total",
-		"ah_resolve_requests_total",
-		"ah_fallback_total",
-		"ah_grpc_register_artifact_total",
-		"ah_grpc_register_artifact_errors_total",
-		"ah_grpc_resolve_handoff_total",
-		"ah_grpc_resolve_handoff_errors_total",
-		"ah_grpc_notify_node_terminal_total",
-		"ah_grpc_finalize_sample_run_total",
-		"ah_grpc_evaluate_gc_total",
-		"ah_grpc_get_lifecycle_total",
-	} {
-		reg.EnsureCounter(name)
+	m, err := metrics.New()
+	if err != nil {
+		panic(fmt.Sprintf("artifact-handoff: metrics init failed: %v", err))
 	}
-	reg.EnsureGauge("ah_gc_backlog_bytes")
 	return &Service{
 		store:                 store,
 		now:                   func() time.Time { return time.Now().UTC() },
-		metrics:               reg,
+		metrics:               m,
 		minRetention:          15 * time.Minute,
 		retentionPolicySource: "service_default",
 	}
 }
 
-func (s *Service) Metrics() *metrics.Registry {
+func (s *Service) Metrics() *metrics.Metrics {
 	return s.metrics
 }
 
@@ -91,7 +78,7 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
 		return "", err
 	}
-	s.metrics.IncCounter("ah_artifacts_registered_total")
+	s.metrics.IncArtifactsRegistered()
 	if artifact.NodeName != "" {
 		return domain.AvailabilityStateLocalOnly, nil
 	}
@@ -113,7 +100,7 @@ func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID 
 }
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
-	s.metrics.IncCounter("ah_resolve_requests_total")
+	s.metrics.IncResolveRequests()
 	if binding.SampleRunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required")
 	}
@@ -184,7 +171,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Decision: domain.ResolutionDecisionUnavailable,
 		}, nil
 	default:
-		s.metrics.IncCounter("ah_fallback_total")
+		s.metrics.IncFallback()
 		return domain.ResolvedHandoff{
 			Status:                  domain.ResolutionStatusResolved,
 			Decision:                domain.ResolutionDecisionRemoteFetch,
@@ -236,7 +223,7 @@ func (s *Service) FinalizeSampleRunCore(ctx context.Context, sampleRunID string)
 	lifecycle.GCEligible = false
 	lifecycle.GCEligibleAt = nil
 	lifecycle.GCBlockedReason = "gc_not_evaluated"
-	s.metrics.SetGauge("ah_gc_backlog_bytes", 0)
+	s.metrics.SetGCBacklogBytes(0)
 	return s.store.UpsertSampleRunLifecycle(ctx, lifecycle)
 }
 
@@ -277,7 +264,7 @@ func (s *Service) EvaluateGCCore(ctx context.Context, sampleRunID string) error 
 		lifecycle.GCEligibleAt = &now
 		lifecycle.GCBlockedReason = ""
 	}
-	s.metrics.SetGauge("ah_gc_backlog_bytes", float64(estimateGCBacklogBytes(lifecycle)))
+	s.metrics.SetGCBacklogBytes(float64(estimateGCBacklogBytes(lifecycle)))
 	return s.store.UpsertSampleRunLifecycle(ctx, lifecycle)
 }
 

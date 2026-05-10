@@ -1,88 +1,84 @@
 package metrics
 
 import (
-	"fmt"
+	"context"
 	"net/http"
-	"sort"
-	"strings"
-	"sync"
+
+	promclient "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	promexporter "go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
-type Registry struct {
-	mu       sync.RWMutex
-	counters map[string]float64
-	gauges   map[string]float64
+type Metrics struct {
+	artifactsRegistered        metric.Int64Counter
+	resolveRequests            metric.Int64Counter
+	fallback                   metric.Int64Counter
+	grpcRegisterArtifact       metric.Int64Counter
+	grpcRegisterArtifactErrors metric.Int64Counter
+	grpcResolveHandoff         metric.Int64Counter
+	grpcResolveHandoffErrors   metric.Int64Counter
+	grpcNotifyNodeTerminal     metric.Int64Counter
+	grpcFinalizeSampleRun      metric.Int64Counter
+	grpcEvaluateGC             metric.Int64Counter
+	grpcGetLifecycle           metric.Int64Counter
+	gcBacklogBytes             metric.Float64Gauge
+	handler                    http.Handler
 }
 
-func NewRegistry() *Registry {
-	return &Registry{
-		counters: map[string]float64{},
-		gauges:   map[string]float64{},
+func New() (*Metrics, error) {
+	reg := promclient.NewRegistry()
+	exporter, err := promexporter.New(promexporter.WithRegisterer(reg))
+	if err != nil {
+		return nil, err
 	}
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(exporter))
+	meter := provider.Meter("github.com/HeaInSeo/artifact-handoff")
+
+	m := &Metrics{
+		handler: promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+	}
+
+	counters := []struct {
+		dest *metric.Int64Counter
+		name string
+	}{
+		{&m.artifactsRegistered, "ah_artifacts_registered"},
+		{&m.resolveRequests, "ah_resolve_requests"},
+		{&m.fallback, "ah_fallback"},
+		{&m.grpcRegisterArtifact, "ah_grpc_register_artifact"},
+		{&m.grpcRegisterArtifactErrors, "ah_grpc_register_artifact_errors"},
+		{&m.grpcResolveHandoff, "ah_grpc_resolve_handoff"},
+		{&m.grpcResolveHandoffErrors, "ah_grpc_resolve_handoff_errors"},
+		{&m.grpcNotifyNodeTerminal, "ah_grpc_notify_node_terminal"},
+		{&m.grpcFinalizeSampleRun, "ah_grpc_finalize_sample_run"},
+		{&m.grpcEvaluateGC, "ah_grpc_evaluate_gc"},
+		{&m.grpcGetLifecycle, "ah_grpc_get_lifecycle"},
+	}
+	for _, c := range counters {
+		*c.dest, err = meter.Int64Counter(c.name)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if m.gcBacklogBytes, err = meter.Float64Gauge("ah_gc_backlog_bytes"); err != nil {
+		return nil, err
+	}
+
+	return m, nil
 }
 
-func (r *Registry) IncCounter(name string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.counters[name]++
-}
-
-func (r *Registry) EnsureCounter(name string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.counters[name]; !ok {
-		r.counters[name] = 0
-	}
-}
-
-func (r *Registry) SetGauge(name string, value float64) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.gauges[name] = value
-}
-
-func (r *Registry) EnsureGauge(name string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, ok := r.gauges[name]; !ok {
-		r.gauges[name] = 0
-	}
-}
-
-func (r *Registry) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
-		_, _ = w.Write([]byte(r.Render()))
-	})
-}
-
-func (r *Registry) Render() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	lines := make([]string, 0, len(r.counters)+len(r.gauges))
-	counterNames := make([]string, 0, len(r.counters))
-	for name := range r.counters {
-		counterNames = append(counterNames, name)
-	}
-	sort.Strings(counterNames)
-	for _, name := range counterNames {
-		lines = append(lines, fmt.Sprintf("# TYPE %s counter", name))
-		lines = append(lines, fmt.Sprintf("%s %g", name, r.counters[name]))
-	}
-
-	gaugeNames := make([]string, 0, len(r.gauges))
-	for name := range r.gauges {
-		gaugeNames = append(gaugeNames, name)
-	}
-	sort.Strings(gaugeNames)
-	for _, name := range gaugeNames {
-		lines = append(lines, fmt.Sprintf("# TYPE %s gauge", name))
-		lines = append(lines, fmt.Sprintf("%s %g", name, r.gauges[name]))
-	}
-
-	if len(lines) == 0 {
-		return ""
-	}
-	return strings.Join(lines, "\n") + "\n"
-}
+func (m *Metrics) IncArtifactsRegistered()        { m.artifactsRegistered.Add(context.Background(), 1) }
+func (m *Metrics) IncResolveRequests()             { m.resolveRequests.Add(context.Background(), 1) }
+func (m *Metrics) IncFallback()                    { m.fallback.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCRegisterArtifact()        { m.grpcRegisterArtifact.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCRegisterArtifactErrors()  { m.grpcRegisterArtifactErrors.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCResolveHandoff()          { m.grpcResolveHandoff.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCResolveHandoffErrors()    { m.grpcResolveHandoffErrors.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCNotifyNodeTerminal()      { m.grpcNotifyNodeTerminal.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCFinalizeSampleRun()       { m.grpcFinalizeSampleRun.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCEvaluateGC()              { m.grpcEvaluateGC.Add(context.Background(), 1) }
+func (m *Metrics) IncGRPCGetLifecycle()            { m.grpcGetLifecycle.Add(context.Background(), 1) }
+func (m *Metrics) SetGCBacklogBytes(v float64)     { m.gcBacklogBytes.Record(context.Background(), v) }
+func (m *Metrics) Handler() http.Handler           { return m.handler }

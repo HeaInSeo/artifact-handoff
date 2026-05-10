@@ -21,7 +21,7 @@ func RegisterGRPCService(server grpc.ServiceRegistrar, service *Service) {
 }
 
 func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.RegisterArtifactRequest) (*ahv1.RegisterArtifactResponse, error) {
-	s.service.Metrics().IncCounter("ah_grpc_register_artifact_total")
+	s.service.Metrics().IncGRPCRegisterArtifact()
 	artifact := req.GetArtifact()
 	state, err := s.service.RegisterArtifactCore(ctx, domain.Artifact{
 		SampleRunID:    artifact.GetSampleRunId(),
@@ -34,14 +34,14 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 		SizeBytes:      artifact.GetSizeBytes(),
 	})
 	if err != nil {
-		s.service.Metrics().IncCounter("ah_grpc_register_artifact_errors_total")
+		s.service.Metrics().IncGRPCRegisterArtifactErrors()
 		return nil, err
 	}
 	return &ahv1.RegisterArtifactResponse{AvailabilityState: string(state)}, nil
 }
 
 func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.ResolveHandoffRequest) (*ahv1.ResolveHandoffResponse, error) {
-	s.service.Metrics().IncCounter("ah_grpc_resolve_handoff_total")
+	s.service.Metrics().IncGRPCResolveHandoff()
 	binding := req.GetBinding()
 	resolved, err := s.service.ResolveHandoffCore(ctx, domain.Binding{
 		BindingName:        binding.GetBindingName(),
@@ -56,7 +56,7 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 		Required:           binding.GetRequired(),
 	}, req.GetTargetNodeName())
 	if err != nil {
-		s.service.Metrics().IncCounter("ah_grpc_resolve_handoff_errors_total")
+		s.service.Metrics().IncGRPCResolveHandoffErrors()
 		return nil, err
 	}
 	return &ahv1.ResolveHandoffResponse{
@@ -69,7 +69,7 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 }
 
 func (s *grpcResolverServer) NotifyNodeTerminal(ctx context.Context, req *ahv1.NotifyNodeTerminalRequest) (*ahv1.NotifyNodeTerminalResponse, error) {
-	s.service.Metrics().IncCounter("ah_grpc_notify_node_terminal_total")
+	s.service.Metrics().IncGRPCNotifyNodeTerminal()
 	if err := s.service.NotifyNodeTerminalCore(ctx, req.GetSampleRunId(), req.GetNodeId(), req.GetTerminalState()); err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (s *grpcResolverServer) NotifyNodeTerminal(ctx context.Context, req *ahv1.N
 }
 
 func (s *grpcResolverServer) FinalizeSampleRun(ctx context.Context, req *ahv1.FinalizeSampleRunRequest) (*ahv1.FinalizeSampleRunResponse, error) {
-	s.service.Metrics().IncCounter("ah_grpc_finalize_sample_run_total")
+	s.service.Metrics().IncGRPCFinalizeSampleRun()
 	if err := s.service.FinalizeSampleRunCore(ctx, req.GetSampleRunId()); err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *grpcResolverServer) FinalizeSampleRun(ctx context.Context, req *ahv1.Fi
 }
 
 func (s *grpcResolverServer) EvaluateGC(ctx context.Context, req *ahv1.EvaluateGCRequest) (*ahv1.EvaluateGCResponse, error) {
-	s.service.Metrics().IncCounter("ah_grpc_evaluate_gc_total")
+	s.service.Metrics().IncGRPCEvaluateGC()
 	if err := s.service.EvaluateGCCore(ctx, req.GetSampleRunId()); err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (s *grpcResolverServer) EvaluateGC(ctx context.Context, req *ahv1.EvaluateG
 }
 
 func (s *grpcResolverServer) GetSampleRunLifecycle(ctx context.Context, req *ahv1.GetSampleRunLifecycleRequest) (*ahv1.GetSampleRunLifecycleResponse, error) {
-	s.service.Metrics().IncCounter("ah_grpc_get_lifecycle_total")
+	s.service.Metrics().IncGRPCGetLifecycle()
 	lifecycle, ok, err := s.service.GetSampleRunLifecycleCore(ctx, req.GetSampleRunId())
 	if err != nil {
 		return nil, err

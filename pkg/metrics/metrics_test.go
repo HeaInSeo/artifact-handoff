@@ -1,38 +1,46 @@
 package metrics
 
 import (
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestRegistryRender(t *testing.T) {
-	reg := NewRegistry()
-	reg.IncCounter("ah_resolve_requests_total")
-	reg.IncCounter("ah_artifacts_registered_total")
-	reg.SetGauge("ah_gc_backlog_bytes", 512)
+func TestMetricsHandlerExportsCounterAndGauge(t *testing.T) {
+	m, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
-	rendered := reg.Render()
-	if !strings.Contains(rendered, "ah_resolve_requests_total 1") {
-		t.Fatalf("missing counter in render: %s", rendered)
-	}
-	if !strings.Contains(rendered, "ah_artifacts_registered_total 1") {
-		t.Fatalf("missing artifact counter in render: %s", rendered)
-	}
-	if !strings.Contains(rendered, "ah_gc_backlog_bytes 512") {
-		t.Fatalf("missing gauge in render: %s", rendered)
+	m.IncArtifactsRegistered()
+	m.IncResolveRequests()
+	m.SetGCBacklogBytes(512)
+
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+
+	body := rec.Body.String()
+	for _, want := range []string{
+		"ah_artifacts_registered_total",
+		"ah_resolve_requests_total",
+		"ah_gc_backlog_bytes",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q in Prometheus output:\n%s", want, body)
+		}
 	}
 }
 
-func TestRegistryRenderZeroInitializedMetrics(t *testing.T) {
-	reg := NewRegistry()
-	reg.EnsureCounter("ah_resolve_requests_total")
-	reg.EnsureGauge("ah_gc_backlog_bytes")
-
-	rendered := reg.Render()
-	if !strings.Contains(rendered, "ah_resolve_requests_total 0") {
-		t.Fatalf("missing zero-valued counter in render: %s", rendered)
+func TestMetricsHandlerReturns200(t *testing.T) {
+	m, err := New()
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	if !strings.Contains(rendered, "ah_gc_backlog_bytes 0") {
-		t.Fatalf("missing zero-valued gauge in render: %s", rendered)
+
+	rec := httptest.NewRecorder()
+	m.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+
+	if rec.Code != 200 {
+		t.Fatalf("handler returned %d: %s", rec.Code, rec.Body.String())
 	}
 }

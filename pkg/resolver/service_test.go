@@ -13,6 +13,24 @@ import (
 	"github.com/HeaInSeo/artifact-handoff/pkg/inventory"
 )
 
+func scrapeMetrics(t *testing.T, h http.Handler) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/metrics", nil))
+	return rec.Body.String()
+}
+
+func hasMetricValue(body, metricName, value string) bool {
+	suffix := " " + value
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, metricName) && strings.HasSuffix(line, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+
 func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := NewService(store)
@@ -388,7 +406,7 @@ func TestEvaluateGCSetsEligibility(t *testing.T) {
 	if lifecycle.RetainedArtifactBytes != 2048 {
 		t.Fatalf("retainedArtifactBytes = %d, want 2048", lifecycle.RetainedArtifactBytes)
 	}
-	if rendered := service.Metrics().Render(); !strings.Contains(rendered, "ah_gc_backlog_bytes 2048") {
+	if rendered := scrapeMetrics(t, service.Metrics().Handler()); !hasMetricValue(rendered, "ah_gc_backlog_bytes", "2048") {
 		t.Fatalf("expected gc backlog gauge to reflect eligible retained artifact, got %s", rendered)
 	}
 }
@@ -480,7 +498,7 @@ func TestEvaluateGCBlocksWhenRetentionWindowActive(t *testing.T) {
 	if lifecycle.GCBlockedReason != "retention_window_active" {
 		t.Fatalf("gcBlockedReason = %q, want retention_window_active", lifecycle.GCBlockedReason)
 	}
-	if rendered := service.Metrics().Render(); !strings.Contains(rendered, "ah_gc_backlog_bytes 0") {
+	if rendered := scrapeMetrics(t, service.Metrics().Handler()); !hasMetricValue(rendered, "ah_gc_backlog_bytes", "0") {
 		t.Fatalf("expected gc backlog gauge to stay zero while blocked, got %s", rendered)
 	}
 }
