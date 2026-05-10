@@ -114,7 +114,6 @@ func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID 
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
 	s.metrics.IncCounter("ah_resolve_requests_total")
-	s.metrics.SetGauge("ah_gc_backlog_bytes", 0)
 	if binding.SampleRunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required")
 	}
