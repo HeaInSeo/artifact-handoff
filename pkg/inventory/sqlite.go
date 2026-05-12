@@ -129,7 +129,7 @@ func (s *SQLiteStore) ListArtifactsBySampleRun(ctx context.Context, sampleRunID 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []domain.Artifact
 	for rows.Next() {
 		var a domain.Artifact
@@ -192,7 +192,7 @@ func (s *SQLiteStore) ListNodeTerminalsBySampleRun(ctx context.Context, sampleRu
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []domain.NodeTerminalRecord
 	for rows.Next() {
 		var r domain.NodeTerminalRecord

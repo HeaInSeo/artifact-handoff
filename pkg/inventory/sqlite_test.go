@@ -236,7 +236,7 @@ func TestSQLiteStore_Persistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteStore (reopen): %v", err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 
 	gotArtifact, ok, err := s2.GetArtifact(ctx, "run-persist", "node-a", "attempt-1", "result")
 	if err != nil {

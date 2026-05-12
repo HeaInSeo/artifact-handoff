@@ -123,11 +123,11 @@ func lifecycleToGRPC(lifecycle domain.SampleRunLifecycle) *ahv1.GetSampleRunLife
 		RetentionDuration:     lifecycle.RetentionDuration.String(),
 		GcEligible:            lifecycle.GCEligible,
 		GcBlockedReason:       lifecycle.GCBlockedReason,
-		TerminalNodeCount:     int32(lifecycle.TerminalNodeCount),
-		SucceededNodeCount:    int32(lifecycle.SucceededNodeCount),
-		FailedNodeCount:       int32(lifecycle.FailedNodeCount),
-		CanceledNodeCount:     int32(lifecycle.CanceledNodeCount),
-		RetainedArtifactCount: int32(lifecycle.RetainedArtifactCount),
+		TerminalNodeCount:     int32(lifecycle.TerminalNodeCount),     //nolint:gosec
+		SucceededNodeCount:    int32(lifecycle.SucceededNodeCount),    //nolint:gosec
+		FailedNodeCount:       int32(lifecycle.FailedNodeCount),       //nolint:gosec
+		CanceledNodeCount:     int32(lifecycle.CanceledNodeCount),     //nolint:gosec
+		RetainedArtifactCount: int32(lifecycle.RetainedArtifactCount), //nolint:gosec
 		RetainedArtifactBytes: lifecycle.RetainedArtifactBytes,
 	}
 	if lifecycle.FinalizedAt != nil {

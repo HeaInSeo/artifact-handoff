@@ -35,7 +35,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("grpc.NewClient() error = %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	client := ahv1.NewArtifactHandoffResolverClient(conn)
 
 	registerResp, err := client.RegisterArtifact(ctx, &ahv1.RegisterArtifactRequest{
