@@ -305,6 +305,162 @@ func TestResolveHandoffRejectsUnknownConsumePolicy(t *testing.T) {
 	}
 }
 
+// Planning mode tests: targetNodeName == "" means Spawner has not scheduled the Pod yet.
+// AH must return placement guidance so Spawner can build the PodSpec.
+
+func TestResolveHandoffPlanningMode_SameNodeOnly(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "jumi://runs/run-plan/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeOnly,
+	}, "") // targetNodeName empty = planning mode
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusResolved {
+		t.Fatalf("status = %q, want RESOLVED (planning mode must not return MISSING)", resolved.Status)
+	}
+	if resolved.Decision != domain.ResolutionDecisionLocalReuse {
+		t.Fatalf("decision = %q, want local_reuse", resolved.Decision)
+	}
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeRequiredNode {
+		t.Fatalf("placementIntent.mode = %q, want required_node", resolved.PlacementIntent.Mode)
+	}
+	if resolved.PlacementIntent.NodeName != "k8s-node-1" {
+		t.Fatalf("placementIntent.nodeName = %q, want k8s-node-1", resolved.PlacementIntent.NodeName)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeLocalReuse {
+		t.Fatalf("materializationPlan.mode = %q, want local_reuse", resolved.MaterializationPlan.Mode)
+	}
+}
+
+func TestResolveHandoffPlanningMode_SameNodeThenRemote(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan2",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "jumi://runs/run-plan2/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan2",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusResolved {
+		t.Fatalf("status = %q, want RESOLVED", resolved.Status)
+	}
+	// PreferredNode hint must be present so Spawner can request the producer node.
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModePreferredNode {
+		t.Fatalf("placementIntent.mode = %q, want preferred_node", resolved.PlacementIntent.Mode)
+	}
+	if resolved.PlacementIntent.NodeName != "k8s-node-1" {
+		t.Fatalf("placementIntent.nodeName = %q, want k8s-node-1", resolved.PlacementIntent.NodeName)
+	}
+	// MaterializationPlan is remote_fetch as fallback for when scheduling lands elsewhere.
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationPlan.mode = %q, want remote_fetch", resolved.MaterializationPlan.Mode)
+	}
+}
+
+func TestResolveHandoffPlanningMode_RemoteOK(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan3",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "jumi://runs/run-plan3/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan3",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusResolved {
+		t.Fatalf("status = %q, want RESOLVED", resolved.Status)
+	}
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeNone {
+		t.Fatalf("placementIntent.mode = %q, want none", resolved.PlacementIntent.Mode)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationPlan.mode = %q, want remote_fetch", resolved.MaterializationPlan.Mode)
+	}
+}
+
+// Post-scheduling check: targetNodeName is known, consumer is on a different node.
+func TestResolveHandoffPostScheduling_SameNodeOnly_Violation(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-post",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "jumi://runs/run-post/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-post",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeOnly,
+	}, "k8s-node-2") // different node → violation
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusMissing {
+		t.Fatalf("status = %q, want MISSING (post-scheduling violation)", resolved.Status)
+	}
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeRequiredNode {
+		t.Fatalf("placementIntent.mode = %q, want required_node", resolved.PlacementIntent.Mode)
+	}
+}
+
 func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)

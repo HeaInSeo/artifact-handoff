@@ -205,57 +205,106 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			return domain.ResolvedHandoff{}, fmt.Errorf("artifact digest mismatch for binding %s", binding.BindingName)
 		}
 	}
-	if targetNodeName != "" && artifact.NodeName != "" && targetNodeName == artifact.NodeName {
-		matPlan := domain.MaterializationPlan{
-			Mode: domain.MaterializationModeLocalReuse,
-			URI:  artifact.URI,
-		}
+	// Build the materialization plan helpers up front — both branches may need them.
+	localMatPlan := func() domain.MaterializationPlan {
+		mp := domain.MaterializationPlan{Mode: domain.MaterializationModeLocalReuse, URI: artifact.URI}
 		if artifact.Digest != "" {
-			matPlan.ExpectedDigest = artifact.Digest
+			mp.ExpectedDigest = artifact.Digest
 		}
 		if binding.ExpectedDigest != "" {
-			matPlan.ExpectedDigest = binding.ExpectedDigest
+			mp.ExpectedDigest = binding.ExpectedDigest
 		}
+		return mp
+	}
+	remoteMatPlan := func() domain.MaterializationPlan {
+		mp := domain.MaterializationPlan{Mode: domain.MaterializationModeRemoteFetch, URI: artifact.URI}
+		if artifact.Digest != "" {
+			mp.ExpectedDigest = artifact.Digest
+		}
+		if binding.ExpectedDigest != "" {
+			mp.ExpectedDigest = binding.ExpectedDigest
+		}
+		return mp
+	}
+
+	// targetNodeName is known → post-scheduling check: test whether the consumer
+	// is actually co-located with the producer.
+	if targetNodeName != "" {
+		if artifact.NodeName != "" && targetNodeName == artifact.NodeName {
+			return domain.ResolvedHandoff{
+				Status:   domain.ResolutionStatusResolved,
+				Decision: domain.ResolutionDecisionLocalReuse,
+				PlacementIntent: domain.PlacementIntent{
+					Mode:     domain.PlacementIntentModePreferredNode,
+					NodeName: artifact.NodeName,
+				},
+				MaterializationPlan: localMatPlan(),
+				Reason:              "artifact available on target node",
+				Retryable:           false,
+			}, nil
+		}
+		// Consumer landed on a different node than the producer.
+		switch binding.ConsumePolicy {
+		case domain.ConsumePolicySameNodeOnly:
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeRequiredNode, NodeName: artifact.NodeName},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "policy requires same node but consumer is on a different node",
+				Retryable:           false,
+			}, nil
+		default:
+			s.metrics.IncFallback()
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusResolved,
+				Decision:            domain.ResolutionDecisionRemoteFetch,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: remoteMatPlan(),
+				Reason:              "artifact available via remote fetch",
+				Retryable:           false,
+			}, nil
+		}
+	}
+
+	// targetNodeName is empty → pre-scheduling / planning mode.
+	// Return placement guidance so Spawner can construct the PodSpec before scheduling.
+	switch binding.ConsumePolicy {
+	case domain.ConsumePolicySameNodeOnly:
+		// Must run on the producer node; local reuse is guaranteed if scheduled correctly.
 		return domain.ResolvedHandoff{
 			Status:   domain.ResolutionStatusResolved,
 			Decision: domain.ResolutionDecisionLocalReuse,
 			PlacementIntent: domain.PlacementIntent{
+				Mode:     domain.PlacementIntentModeRequiredNode,
+				NodeName: artifact.NodeName,
+			},
+			MaterializationPlan: localMatPlan(),
+			Reason:              "planning: schedule consumer on producer node for local reuse",
+			Retryable:           false,
+		}, nil
+	case domain.ConsumePolicySameNodeThenRemote:
+		// Prefer the producer node; fall back to remote fetch if scheduled elsewhere.
+		s.metrics.IncFallback()
+		return domain.ResolvedHandoff{
+			Status:   domain.ResolutionStatusResolved,
+			Decision: domain.ResolutionDecisionRemoteFetch,
+			PlacementIntent: domain.PlacementIntent{
 				Mode:     domain.PlacementIntentModePreferredNode,
 				NodeName: artifact.NodeName,
 			},
-			MaterializationPlan: matPlan,
-			Reason:              "artifact available on target node",
+			MaterializationPlan: remoteMatPlan(),
+			Reason:              "planning: prefer producer node; remote fetch if scheduled elsewhere",
 			Retryable:           false,
 		}, nil
-	}
-	switch binding.ConsumePolicy {
-	case domain.ConsumePolicySameNodeOnly:
-		return domain.ResolvedHandoff{
-			Status:              domain.ResolutionStatusMissing,
-			Decision:            domain.ResolutionDecisionUnavailable,
-			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeRequiredNode, NodeName: artifact.NodeName},
-			MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
-			Reason:              "policy requires same node",
-			Retryable:           false,
-		}, nil
-	default:
+	default: // ConsumePolicyRemoteOK
 		s.metrics.IncFallback()
-		matPlan := domain.MaterializationPlan{
-			Mode: domain.MaterializationModeRemoteFetch,
-			URI:  artifact.URI,
-		}
-		if artifact.Digest != "" {
-			matPlan.ExpectedDigest = artifact.Digest
-		}
-		if binding.ExpectedDigest != "" {
-			matPlan.ExpectedDigest = binding.ExpectedDigest
-		}
 		return domain.ResolvedHandoff{
 			Status:              domain.ResolutionStatusResolved,
 			Decision:            domain.ResolutionDecisionRemoteFetch,
 			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
-			MaterializationPlan: matPlan,
-			Reason:              "artifact available via remote fetch",
+			MaterializationPlan: remoteMatPlan(),
+			Reason:              "planning: remote fetch, no placement constraint",
 			Retryable:           false,
 		}, nil
 	}
