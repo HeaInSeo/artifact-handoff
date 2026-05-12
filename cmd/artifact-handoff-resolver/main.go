@@ -20,7 +20,10 @@ func main() {
 	grpcAddr := envOrDefault("AH_GRPC_ADDR", ":9090")
 
 	store := inventory.NewMemoryStore()
-	service := resolver.NewService(store)
+	service, err := resolver.NewService(store)
+	if err != nil {
+		log.Fatal(err)
+	}
 	handler := resolver.NewHTTPHandler(service)
 	httpServer := &http.Server{
 		Addr:              httpAddr,

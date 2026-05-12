@@ -13,6 +13,15 @@ import (
 	"github.com/HeaInSeo/artifact-handoff/pkg/inventory"
 )
 
+func newTestService(t testing.TB, store inventory.Store) *Service {
+	t.Helper()
+	svc, err := NewService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
 func scrapeMetrics(t *testing.T, h http.Handler) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
@@ -30,10 +39,9 @@ func hasMetricValue(body, metricName, value string) bool {
 	return false
 }
 
-
 func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 
 	state, err := service.RegisterArtifact(context.Background(), domain.Artifact{
 		SampleRunID:    "sample-1",
@@ -69,7 +77,7 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 
 func TestResolveHandoffLocalReuse(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
 		SampleRunID:    "sample-1",
 		ProducerNodeID: "parent-a",
@@ -104,7 +112,7 @@ func TestResolveHandoffLocalReuse(t *testing.T) {
 
 func TestResolveHandoffRemoteFetch(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
 		SampleRunID:    "sample-1",
 		ProducerNodeID: "parent-a",
@@ -137,7 +145,7 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 
 func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
 		SampleRunID:    "sample-digest",
 		ProducerNodeID: "parent-a",
@@ -166,7 +174,7 @@ func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 
 func TestResolveHandoffReturnsPendingWhenProducerNotTerminalAndArtifactMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 
 	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
 		BindingName:        "dataset-input",
@@ -189,7 +197,7 @@ func TestResolveHandoffReturnsPendingWhenProducerNotTerminalAndArtifactMissing(t
 
 func TestResolveHandoffReturnsMissingWhenProducerSucceededButArtifactMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-missing", "parent-a", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
@@ -215,7 +223,7 @@ func TestResolveHandoffReturnsMissingWhenProducerSucceededButArtifactMissing(t *
 
 func TestResolveHandoffReturnsProducerFailedWhenProducerFailedAndArtifactMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-producer-failed", "parent-a", "Failed"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
@@ -241,7 +249,7 @@ func TestResolveHandoffReturnsProducerFailedWhenProducerFailedAndArtifactMissing
 
 func TestResolveHandoffReturnsMissingWhenSampleAlreadyGCEligible(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -285,7 +293,7 @@ func TestResolveHandoffReturnsMissingWhenSampleAlreadyGCEligible(t *testing.T) {
 
 func TestNotifyNodeTerminalRecordsState(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
@@ -304,7 +312,7 @@ func TestNotifyNodeTerminalRecordsState(t *testing.T) {
 
 func TestNotifyNodeTerminalRejectsUnsupportedState(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "Running"); err == nil {
 		t.Fatal("expected unsupported terminal state to fail")
@@ -313,7 +321,7 @@ func TestNotifyNodeTerminalRejectsUnsupportedState(t *testing.T) {
 
 func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	fixedNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return fixedNow }
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -369,7 +377,7 @@ func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 
 func TestEvaluateGCSetsEligibility(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -413,7 +421,7 @@ func TestEvaluateGCSetsEligibility(t *testing.T) {
 
 func TestEvaluateGCBlocksWhenTerminalNodesMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
 		SampleRunID:    "sample-2",
 		ProducerNodeID: "parent-a",
@@ -444,7 +452,7 @@ func TestEvaluateGCBlocksWhenTerminalNodesMissing(t *testing.T) {
 
 func TestEvaluateGCBlocksWhenSampleRunNotFinalized(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	if err := service.EvaluateGC(context.Background(), "sample-unfinalized"); err != nil {
 		t.Fatalf("evaluate gc: %v", err)
 	}
@@ -465,7 +473,7 @@ func TestEvaluateGCBlocksWhenSampleRunNotFinalized(t *testing.T) {
 
 func TestEvaluateGCBlocksWhenRetentionWindowActive(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -505,7 +513,7 @@ func TestEvaluateGCBlocksWhenRetentionWindowActive(t *testing.T) {
 
 func TestEvaluateGCRefreshesStaleLifecycleSnapshot(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -558,7 +566,7 @@ func TestEvaluateGCRefreshesStaleLifecycleSnapshot(t *testing.T) {
 
 func TestHTTPRegisterArtifact(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
@@ -587,7 +595,7 @@ func TestHTTPRegisterArtifact(t *testing.T) {
 
 func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
@@ -620,7 +628,7 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 
 func TestHTTPGetArtifact(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -658,7 +666,7 @@ func TestHTTPGetArtifact(t *testing.T) {
 
 func TestHTTPGetArtifactReturnsNotFound(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=missing&producerNodeId=producer-a&outputName=report", nil)
@@ -671,7 +679,7 @@ func TestHTTPGetArtifactReturnsNotFound(t *testing.T) {
 
 func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
 	for _, artifact := range []domain.Artifact{
@@ -722,7 +730,7 @@ func timePtr(v time.Time) *time.Time {
 
 func TestHTTPFinalizeAndEvaluateGC(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
 	finalizeReq := httptest.NewRequest(http.MethodPost, "/v1/sampleRuns:finalize", strings.NewReader(`{"sampleRunId":"sample-http"}`))

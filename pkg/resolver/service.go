@@ -18,10 +18,10 @@ type Service struct {
 	retentionPolicySource string
 }
 
-func NewService(store inventory.Store) *Service {
+func NewService(store inventory.Store) (*Service, error) {
 	m, err := metrics.New()
 	if err != nil {
-		panic(fmt.Sprintf("artifact-handoff: metrics init failed: %v", err))
+		return nil, fmt.Errorf("artifact-handoff: metrics init failed: %w", err)
 	}
 	return &Service{
 		store:                 store,
@@ -29,7 +29,7 @@ func NewService(store inventory.Store) *Service {
 		metrics:               m,
 		minRetention:          15 * time.Minute,
 		retentionPolicySource: "service_default",
-	}
+	}, nil
 }
 
 func (s *Service) Metrics() *metrics.Metrics {

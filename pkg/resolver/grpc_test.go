@@ -15,7 +15,7 @@ import (
 
 func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	store := inventory.NewMemoryStore()
-	service := NewService(store)
+	service := newTestService(t, store)
 
 	listener := bufconn.Listen(1024 * 1024)
 	server := grpc.NewServer()
