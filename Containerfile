@@ -17,6 +17,6 @@ RUN apt-get update \
 
 COPY --from=builder /out/artifact-handoff-resolver /usr/local/bin/artifact-handoff-resolver
 
-EXPOSE 8080
+EXPOSE 8080 9090
 
 ENTRYPOINT ["/usr/local/bin/artifact-handoff-resolver"]
