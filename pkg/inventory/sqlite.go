@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/HeaInSeo/artifact-handoff/internal/ids"
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
 	_ "modernc.org/sqlite"
 )
@@ -99,7 +100,12 @@ func (s *SQLiteStore) GetArtifact(ctx context.Context, sampleRunID, producerNode
 		SELECT sample_run_id, producer_node_id, producer_attempt_id, output_name,
 		       artifact_id, digest, node_name, uri, size_bytes, created_at
 		FROM artifacts WHERE key = ?`,
-		sampleRunID+"/"+producerNodeID+"/"+attemptID+"/"+outputName,
+		ids.ArtifactKey{
+			SampleRunID:       sampleRunID,
+			ProducerNodeID:    producerNodeID,
+			ProducerAttemptID: attemptID,
+			OutputName:        outputName,
+		}.String(),
 	)
 	var a domain.Artifact
 	var createdAt string
@@ -145,7 +151,11 @@ func (s *SQLiteStore) RecordNodeTerminal(ctx context.Context, r domain.NodeTermi
 		ON CONFLICT(key) DO UPDATE SET
 			terminal_state = excluded.terminal_state,
 			recorded_at    = excluded.recorded_at`,
-		r.SampleRunID+"/"+r.NodeID+"/"+r.AttemptID,
+		ids.NodeAttemptKey{
+			SampleRunID: r.SampleRunID,
+			NodeID:      r.NodeID,
+			AttemptID:   r.AttemptID,
+		}.String(),
 		r.SampleRunID, r.NodeID, r.AttemptID, r.TerminalState,
 		timeToStr(r.RecordedAt),
 	)
@@ -156,7 +166,11 @@ func (s *SQLiteStore) GetNodeTerminal(ctx context.Context, sampleRunID, nodeID, 
 	row := s.db.QueryRowContext(ctx, `
 		SELECT sample_run_id, node_id, attempt_id, terminal_state, recorded_at
 		FROM node_terminals WHERE key = ?`,
-		sampleRunID+"/"+nodeID+"/"+attemptID,
+		ids.NodeAttemptKey{
+			SampleRunID: sampleRunID,
+			NodeID:      nodeID,
+			AttemptID:   attemptID,
+		}.String(),
 	)
 	var r domain.NodeTerminalRecord
 	var recordedAt string

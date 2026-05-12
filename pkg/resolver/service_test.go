@@ -1003,8 +1003,42 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatal("expected stored artifact")
 	}
-	if artifact.ArtifactID != "sample-http-env:producer-a:result.json" {
-		t.Fatalf("artifactId = %q, want sample-http-env:producer-a:result.json", artifact.ArtifactID)
+	if artifact.ArtifactID != "sample-http-env/producer-a/attempt-1/result.json" {
+		t.Fatalf("artifactId = %q, want canonical artifact identity", artifact.ArtifactID)
+	}
+}
+
+func TestHTTPRegisterArtifactCanonicalizesLegacyArtifactID(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	handler := NewHTTPHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
+		"artifact": {
+			"sampleRunId":"sample-http-legacy",
+			"producerNodeId":"producer-a",
+			"producerAttemptId":"attempt-1",
+			"outputName":"result.json",
+			"artifactId":"sample-http-legacy:producer-a:result.json",
+			"nodeName":"node-a",
+			"uri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("register status = %d, want 200", resp.Code)
+	}
+	artifact, ok, err := store.GetArtifact(context.Background(), "sample-http-legacy", "producer-a", "attempt-1", "result.json")
+	if err != nil {
+		t.Fatalf("get artifact: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected stored artifact")
+	}
+	if artifact.ArtifactID != "sample-http-legacy/producer-a/attempt-1/result.json" {
+		t.Fatalf("artifactId = %q, want canonical artifact identity", artifact.ArtifactID)
 	}
 }
 
@@ -1018,7 +1052,7 @@ func TestHTTPGetArtifact(t *testing.T) {
 		ProducerNodeID:    "producer-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "report",
-		ArtifactID:        "sample-http-get:producer-a:report",
+		ArtifactID:        "sample-http-get/producer-a/attempt-1/report",
 		Digest:            "sha256:abc123",
 		NodeName:          "node-a",
 		URI:               "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
@@ -1071,7 +1105,7 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 			ProducerNodeID:    "producer-a",
 			ProducerAttemptID: "attempt-1",
 			OutputName:        "report",
-			ArtifactID:        "sample-http-list:producer-a:report",
+			ArtifactID:        "sample-http-list/producer-a/attempt-1/report",
 			Digest:            "sha256:one",
 			URI:               "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
 			SizeBytes:         512,
@@ -1081,7 +1115,7 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 			ProducerNodeID:    "producer-b",
 			ProducerAttemptID: "attempt-1",
 			OutputName:        "metrics",
-			ArtifactID:        "sample-http-list:producer-b:metrics",
+			ArtifactID:        "sample-http-list/producer-b/attempt-1/metrics",
 			Digest:            "sha256:two",
 			URI:               "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
 			SizeBytes:         128,

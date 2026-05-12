@@ -3,6 +3,8 @@ package domain
 import (
 	"fmt"
 	"time"
+
+	"github.com/HeaInSeo/artifact-handoff/internal/ids"
 )
 
 type ConsumePolicy string
@@ -65,13 +67,18 @@ type Artifact struct {
 }
 
 func (a Artifact) Key() string {
-	return artifactKey(a.SampleRunID, a.ProducerNodeID, a.ProducerAttemptID, a.OutputName)
+	return ids.ArtifactKey{
+		SampleRunID:       a.SampleRunID,
+		ProducerNodeID:    a.ProducerNodeID,
+		ProducerAttemptID: a.ProducerAttemptID,
+		OutputName:        a.OutputName,
+	}.String()
 }
 
 // CanonicalID returns the product-owned artifact identity.
 // Format: sampleRunId/producerNodeId/producerAttemptId/outputName
 func (a Artifact) CanonicalID() string {
-	return a.SampleRunID + "/" + a.ProducerNodeID + "/" + a.ProducerAttemptID + "/" + a.OutputName
+	return a.Key()
 }
 
 type Binding struct {
@@ -90,7 +97,12 @@ type Binding struct {
 }
 
 func (b Binding) Key() string {
-	return artifactKey(b.SampleRunID, b.ProducerNodeID, b.ProducerAttemptID, b.ProducerOutputName)
+	return ids.ArtifactKey{
+		SampleRunID:       b.SampleRunID,
+		ProducerNodeID:    b.ProducerNodeID,
+		ProducerAttemptID: b.ProducerAttemptID,
+		OutputName:        b.ProducerOutputName,
+	}.String()
 }
 
 type PlacementIntentMode string
@@ -155,8 +167,4 @@ type SampleRunLifecycle struct {
 	CanceledNodeCount     int           `json:"canceledNodeCount,omitempty"`
 	RetainedArtifactCount int           `json:"retainedArtifactCount,omitempty"`
 	RetainedArtifactBytes int64         `json:"retainedArtifactBytes,omitempty"`
-}
-
-func artifactKey(sampleRunID, producerNodeID, attemptID, outputName string) string {
-	return sampleRunID + "/" + producerNodeID + "/" + attemptID + "/" + outputName
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/HeaInSeo/artifact-handoff/internal/ids"
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
 )
 
@@ -32,7 +33,12 @@ func (s *MemoryStore) PutArtifact(_ context.Context, artifact domain.Artifact) e
 func (s *MemoryStore) GetArtifact(_ context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	artifact, ok := s.artifacts[sampleRunID+"/"+producerNodeID+"/"+attemptID+"/"+outputName]
+	artifact, ok := s.artifacts[ids.ArtifactKey{
+		SampleRunID:       sampleRunID,
+		ProducerNodeID:    producerNodeID,
+		ProducerAttemptID: attemptID,
+		OutputName:        outputName,
+	}.String()]
 	return artifact, ok, nil
 }
 
@@ -63,14 +69,22 @@ func (s *MemoryStore) ListNodeTerminalsBySampleRun(_ context.Context, sampleRunI
 func (s *MemoryStore) RecordNodeTerminal(_ context.Context, record domain.NodeTerminalRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.nodeTerminals[record.SampleRunID+"/"+record.NodeID+"/"+record.AttemptID] = record
+	s.nodeTerminals[ids.NodeAttemptKey{
+		SampleRunID: record.SampleRunID,
+		NodeID:      record.NodeID,
+		AttemptID:   record.AttemptID,
+	}.String()] = record
 	return nil
 }
 
 func (s *MemoryStore) GetNodeTerminal(_ context.Context, sampleRunID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	record, ok := s.nodeTerminals[sampleRunID+"/"+nodeID+"/"+attemptID]
+	record, ok := s.nodeTerminals[ids.NodeAttemptKey{
+		SampleRunID: sampleRunID,
+		NodeID:      nodeID,
+		AttemptID:   attemptID,
+	}.String()]
 	return record, ok, nil
 }
 
