@@ -1,4 +1,6 @@
-# DRAGONFLY_ADAPTER_SPEC
+# ~~DRAGONFLY_ADAPTER_SPEC~~
+
+> ~~**REMOVED FROM SCOPE** — Dragonfly integration has been removed from the product roadmap. This document is retained for historical reference only.~~
 
 ## 1. Purpose
 

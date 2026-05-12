@@ -1,4 +1,6 @@
-# DRAGONFLY_ADAPTER_SPEC
+# ~~DRAGONFLY_ADAPTER_SPEC~~
+
+> ~~**SCOPE에서 제거됨** — Dragonfly 통합은 제품 로드맵에서 제거되었다. 이 문서는 히스토리 참고용으로만 보존된다.~~
 
 ## 1. 목적
 

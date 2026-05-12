@@ -16,10 +16,11 @@ Domain meanings, policy semantics, and backend-specific contracts are defined in
 
 Related documents:
 
-- [PRODUCT_IMPLEMENTATION_DESIGN.md](PRODUCT_IMPLEMENTATION_DESIGN.md)
-- [DOMAIN_MODEL.md](DOMAIN_MODEL.md)
-- [PLACEMENT_AND_FALLBACK_POLICY.md](PLACEMENT_AND_FALLBACK_POLICY.md)
-- [DRAGONFLY_ADAPTER_SPEC.md](DRAGONFLY_ADAPTER_SPEC.md)
+- [PHASE1_RESOLVER_STATUS.md](PHASE1_RESOLVER_STATUS.md)
+- ~~[PRODUCT_IMPLEMENTATION_DESIGN.md](PRODUCT_IMPLEMENTATION_DESIGN.md)~~ → [deprecated](deprecated/PRODUCT_IMPLEMENTATION_DESIGN.md)
+- ~~[DOMAIN_MODEL.md](DOMAIN_MODEL.md)~~ → [deprecated](deprecated/DOMAIN_MODEL.md)
+- ~~[PLACEMENT_AND_FALLBACK_POLICY.md](PLACEMENT_AND_FALLBACK_POLICY.md)~~ → [deprecated](deprecated/PLACEMENT_AND_FALLBACK_POLICY.md)
+- ~~[DRAGONFLY_ADAPTER_SPEC.md](DRAGONFLY_ADAPTER_SPEC.md)~~ → removed from scope, see [deprecated](deprecated/DRAGONFLY_ADAPTER_SPEC.md)
 
 ## 2. Architectural Position
 
@@ -31,7 +32,7 @@ It is not:
 - a generic file transfer daemon
 - a standalone storage product
 - a scheduler replacement in its first phase
-- a Dragonfly-derived product
+- ~~a Dragonfly-derived product~~
 
 Its core role is:
 
@@ -49,7 +50,7 @@ The following facts from `artifact-handoff-poc` drive the architecture:
 4. local forensic traces are useful and should not be erased too early
 5. source selection must remain product-readable rather than backend-defined
 6. placement must become explicit control-plane logic rather than script-only orchestration
-7. Dragonfly must stay replaceable
+~~7. Dragonfly must stay replaceable~~
 
 ## 4. Top-Level Subsystems
 
@@ -76,7 +77,7 @@ Responsibilities:
 
 This layer must not leak:
 
-- Dragonfly-native identifiers
+- ~~Dragonfly-native identifiers~~
 - raw Kubernetes scheduling details as the only product vocabulary
 - backend-specific transfer semantics
 
@@ -265,5 +266,5 @@ The current architectural decision is:
 
 - `artifact-handoff` will be a control-plane-first Go project
 - the control plane owns artifact semantics, placement resolution, and fallback entry logic
-- backends, including Dragonfly, sit behind adapter boundaries
+- backends, ~~including Dragonfly,~~ sit behind adapter boundaries
 - runtime object mutation is a Spawner responsibility; `artifact-handoff` returns decisions only, never creates or mutates Kubernetes resources
