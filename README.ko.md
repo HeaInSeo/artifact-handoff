@@ -106,16 +106,21 @@ Deprecated 문서군:
 
 ## 저장소 상태
 
-이 저장소는 현재 initial design-and-scaffold phase에 있다.
+AH v0.1이 JUMI/Spawner 통합 준비 상태로 완료됐다.
 
-현재 구현 우선순위는 다음과 같다.
+**핵심 계약:** `artifact-handoff`는 Kubernetes Job 또는 Pod를 직접 생성하지 않는다.
+placement와 materialization 결정을 반환하고, Spawner가 이를 PodSpec으로 번역한다.
 
-- Phase 1 resolver contract scaffold
-- proto 기반 RPC 경계 초안
-- in-memory inventory/store
-- happy-path `RegisterArtifact`, `ResolveHandoff`, `NotifyNodeTerminal`
-- sample-run lifecycle hook `FinalizeSampleRun`, `EvaluateGC`
+완료된 항목 (v0.1):
+
+- Artifact identity: `sampleRunID/producerNodeID/producerAttemptID/outputName`
+- `ResolveHandoff`가 7개 해결 경로 전체에서 `PlacementIntent` + `MaterializationPlan` 반환
+- gRPC 및 HTTP transport 전 필드 연결 완료
+- SQLite 영속성 (`AH_STORE_DSN=sqlite:<path>`, 기본값: in-memory)
+- A→B→C simulation test (Kubernetes 없이 동작)
+- `attemptID` 소유권: JUMI/Executor 생성, Spawner 전파, AH 소비
 
 현재 진입점:
 
 - resolver binary: `cmd/artifact-handoff-resolver`
+- 상태 문서: [docs/PHASE1_RESOLVER_STATUS.md](docs/PHASE1_RESOLVER_STATUS.md)

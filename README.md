@@ -109,16 +109,21 @@ What is intentionally re-designed here:
 
 ## Repository Status
 
-This repository is in the initial design-and-scaffold phase.
+AH v0.1 is contract-ready for JUMI/Spawner integration.
 
-Current implementation focus:
+**Core contract:** `artifact-handoff` does not create Kubernetes Jobs or Pods.
+It returns placement and materialization decisions. Spawner translates them into PodSpec.
 
-- Phase 1 resolver contract scaffold
-- proto-first RPC boundary definition
-- in-memory inventory/store
-- happy-path `RegisterArtifact`, `ResolveHandoff`, `NotifyNodeTerminal`
-- sample-run lifecycle hooks `FinalizeSampleRun`, `EvaluateGC`
+What is complete (v0.1):
+
+- Artifact identity: `sampleRunID/producerNodeID/producerAttemptID/outputName`
+- `ResolveHandoff` returns `PlacementIntent` + `MaterializationPlan` for all 7 resolution paths
+- gRPC and HTTP transports wired for all fields
+- SQLite persistence via `AH_STORE_DSN=sqlite:<path>` (default: in-memory)
+- A→B→C simulation tests (no Kubernetes required)
+- `attemptID` ownership: JUMI/Executor generates, Spawner propagates, AH consumes
 
 Current entrypoints:
 
 - resolver binary: `cmd/artifact-handoff-resolver`
+- status document: [docs/PHASE1_RESOLVER_STATUS.md](docs/PHASE1_RESOLVER_STATUS.md)

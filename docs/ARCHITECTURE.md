@@ -157,16 +157,25 @@ This layer must not own:
 
 ## 10. Runtime Integration Layer
 
-This layer is where the product touches Kubernetes workload execution.
+This layer is where placement decisions are translated into Kubernetes workload specifications.
 
-Possible responsibilities:
+**Critical contract: `artifact-handoff` does not create Kubernetes Jobs or Pods.**
 
-- merge `ResolvedPlacement` into Job or Pod specs
-- annotate runtime objects with product-readable reasons
-- pass runtime configuration needed by artifact consumers
+`artifact-handoff` returns two decision objects from `ResolveHandoff`:
 
-This layer should be kept thin.
-It is a translation boundary, not the owner of product semantics.
+- `PlacementIntent` — locality direction (`none | preferred_node | required_node`) and the node name when relevant
+- `MaterializationPlan` — how bytes should appear on the consumer node (`none | local_reuse | remote_fetch`) with URI and expected digest
+
+The **Spawner** is responsible for translating these decisions into concrete PodSpec fields:
+
+- `PlacementIntent.preferred_node` → `spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+- `PlacementIntent.required_node` → `spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `MaterializationPlan.remote_fetch` → init-container or sidecar configuration with URI and expected digest
+- `MaterializationPlan.local_reuse` → volume mount or path reference to the locally available artifact
+
+This layer must remain thin.
+`artifact-handoff` owns the decision. Spawner owns the translation.
+Neither may absorb the other's responsibility.
 
 ## 11. Observability And Operations Layer
 
@@ -210,8 +219,10 @@ Product semantics must stay in `artifact-handoff`.
 
 ### 13.2 Placement resolution versus runtime translation
 
-Placement resolution decides.
-Runtime translation applies.
+`artifact-handoff` decides. Spawner translates.
+
+`artifact-handoff` must never create, patch, or delete Kubernetes Jobs or Pods.
+Spawner must never make placement or materialization policy decisions on its own.
 
 ### 13.3 Product metadata versus backend status
 
@@ -255,4 +266,4 @@ The current architectural decision is:
 - `artifact-handoff` will be a control-plane-first Go project
 - the control plane owns artifact semantics, placement resolution, and fallback entry logic
 - backends, including Dragonfly, sit behind adapter boundaries
-- runtime object mutation is a translation layer, not the core product
+- runtime object mutation is a Spawner responsibility; `artifact-handoff` returns decisions only, never creates or mutates Kubernetes resources

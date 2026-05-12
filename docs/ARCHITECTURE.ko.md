@@ -156,16 +156,25 @@ Metadata layer는 product-readable artifact state를 소유한다.
 
 ## 10. Runtime integration layer
 
-이 레이어는 제품이 Kubernetes workload execution과 맞닿는 지점이다.
+이 레이어는 placement decision이 Kubernetes workload spec으로 번역되는 지점이다.
 
-가능한 책임:
+**핵심 계약: `artifact-handoff`는 Kubernetes Job 또는 Pod를 직접 생성하지 않는다.**
 
-- `ResolvedPlacement`를 Job 또는 Pod spec에 merge
-- runtime object에 product-readable reason annotation 추가
-- artifact consumer에 필요한 runtime configuration 전달
+`artifact-handoff`는 `ResolveHandoff`에서 두 가지 결정 객체를 반환한다.
+
+- `PlacementIntent` — locality 방향 (`none | preferred_node | required_node`) 및 해당하는 경우 node 이름
+- `MaterializationPlan` — consumer node에서 bytes가 어떻게 제공되어야 하는지 (`none | local_reuse | remote_fetch`), URI와 expected digest 포함
+
+**Spawner**가 이 결정들을 구체적인 PodSpec 필드로 번역할 책임을 진다.
+
+- `PlacementIntent.preferred_node` → `spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution`
+- `PlacementIntent.required_node` → `spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution`
+- `MaterializationPlan.remote_fetch` → URI와 expected digest를 갖는 init-container 또는 sidecar 설정
+- `MaterializationPlan.local_reuse` → 로컬에서 이미 사용 가능한 artifact의 volume mount 또는 경로 참조
 
 이 레이어는 얇게 유지해야 한다.
-이 레이어는 translation boundary이지, product semantics의 소유자가 아니다.
+`artifact-handoff`는 결정을 소유한다. Spawner는 번역을 소유한다.
+어느 쪽도 상대방의 책임을 흡수해서는 안 된다.
 
 ## 11. Observability 및 operations layer
 
@@ -209,8 +218,10 @@ Product semantics는 `artifact-handoff` 안에 남아야 한다.
 
 ### 13.2 Placement resolution 대 runtime translation
 
-Placement resolution은 결정한다.
-Runtime translation은 적용한다.
+`artifact-handoff`는 결정한다. Spawner는 번역한다.
+
+`artifact-handoff`는 Kubernetes Job 또는 Pod를 절대 생성, 패치, 삭제해서는 안 된다.
+Spawner는 placement나 materialization 정책 결정을 스스로 내려서는 안 된다.
 
 ### 13.3 Product metadata 대 backend status
 
@@ -254,4 +265,4 @@ Data plane은 bytes를 전달하거나 이용 가능하게 만든다.
 - `artifact-handoff`는 control-plane-first Go project가 된다
 - control plane은 artifact semantics, placement resolution, fallback entry logic을 소유한다
 - Dragonfly를 포함한 backend는 adapter boundary 뒤에 둔다
-- runtime object mutation은 translation layer이지 제품 코어가 아니다
+- runtime object mutation은 Spawner의 책임이다. `artifact-handoff`는 결정만 반환하며, Kubernetes 리소스를 생성하거나 변경하지 않는다
