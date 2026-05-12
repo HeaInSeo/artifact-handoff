@@ -51,8 +51,8 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegisterArtifact() error = %v", err)
 	}
-	if registerResp.GetAvailabilityState() != string(domain.AvailabilityStateLocalOnly) {
-		t.Fatalf("availabilityState = %q, want %q", registerResp.GetAvailabilityState(), domain.AvailabilityStateLocalOnly)
+	if registerResp.GetAvailabilityState() != string(domain.AvailabilityStateBoth) {
+		t.Fatalf("availabilityState = %q, want %q", registerResp.GetAvailabilityState(), domain.AvailabilityStateBoth)
 	}
 
 	resolveResp, err := client.ResolveHandoff(ctx, &ahv1.ResolveHandoffRequest{

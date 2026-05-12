@@ -75,14 +75,23 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	if artifact.CreatedAt.IsZero() {
 		artifact.CreatedAt = s.now()
 	}
+	if artifact.ArtifactID == "" {
+		artifact.ArtifactID = artifact.CanonicalID()
+	}
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
 		return "", err
 	}
 	s.metrics.IncArtifactsRegistered()
-	if artifact.NodeName != "" {
+	switch {
+	case artifact.NodeName != "" && artifact.URI != "":
+		return domain.AvailabilityStateBoth, nil
+	case artifact.NodeName != "":
 		return domain.AvailabilityStateLocalOnly, nil
+	case artifact.URI != "":
+		return domain.AvailabilityStateRemoteOnly, nil
+	default:
+		return domain.AvailabilityStateUnavailable, nil
 	}
-	return domain.AvailabilityStateBoth, nil
 }
 
 func (s *Service) GetArtifactCore(ctx context.Context, sampleRunID, producerNodeID, outputName string) (domain.Artifact, bool, error) {
@@ -103,6 +112,9 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	s.metrics.IncResolveRequests()
 	if binding.SampleRunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required")
+	}
+	if err := binding.ConsumePolicy.Validate(); err != nil {
+		return domain.ResolvedHandoff{}, fmt.Errorf("binding %s: %w", binding.BindingName, err)
 	}
 	lifecycle, lifecycleFound, err := s.store.GetSampleRunLifecycle(ctx, binding.SampleRunID)
 	if err != nil {
@@ -152,8 +164,13 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Decision: domain.ResolutionDecisionUnavailable,
 		}, nil
 	}
-	if binding.ExpectedDigest != "" && artifact.Digest != "" && binding.ExpectedDigest != artifact.Digest {
-		return domain.ResolvedHandoff{}, fmt.Errorf("artifact digest mismatch for binding %s", binding.BindingName)
+	if binding.ExpectedDigest != "" {
+		if artifact.Digest == "" {
+			return domain.ResolvedHandoff{}, fmt.Errorf("artifact digest unknown for binding %s: expected digest was specified but artifact has none", binding.BindingName)
+		}
+		if binding.ExpectedDigest != artifact.Digest {
+			return domain.ResolvedHandoff{}, fmt.Errorf("artifact digest mismatch for binding %s", binding.BindingName)
+		}
 	}
 	if targetNodeName != "" && artifact.NodeName != "" && targetNodeName == artifact.NodeName {
 		return domain.ResolvedHandoff{

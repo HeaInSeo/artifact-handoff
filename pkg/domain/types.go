@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type ConsumePolicy string
 
@@ -10,10 +13,20 @@ const (
 	ConsumePolicyRemoteOK           ConsumePolicy = "RemoteOK"
 )
 
+func (p ConsumePolicy) Validate() error {
+	switch p {
+	case ConsumePolicySameNodeOnly, ConsumePolicySameNodeThenRemote, ConsumePolicyRemoteOK, "":
+		return nil
+	default:
+		return fmt.Errorf("unknown consume policy %q", p)
+	}
+}
+
 type AvailabilityState string
 
 const (
 	AvailabilityStateLocalOnly   AvailabilityState = "LOCAL_ONLY"
+	AvailabilityStateRemoteOnly  AvailabilityState = "REMOTE_ONLY"
 	AvailabilityStateBoth        AvailabilityState = "BOTH"
 	AvailabilityStateDeleted     AvailabilityState = "DELETED"
 	AvailabilityStateUnavailable AvailabilityState = "UNAVAILABLE"
@@ -50,6 +63,12 @@ type Artifact struct {
 
 func (a Artifact) Key() string {
 	return artifactKey(a.SampleRunID, a.ProducerNodeID, a.OutputName)
+}
+
+// CanonicalID returns the product-owned artifact identity.
+// Format: sampleRunId/producerNodeId/outputName
+func (a Artifact) CanonicalID() string {
+	return a.SampleRunID + "/" + a.ProducerNodeID + "/" + a.OutputName
 }
 
 type Binding struct {

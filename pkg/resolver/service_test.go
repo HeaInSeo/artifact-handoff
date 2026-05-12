@@ -54,8 +54,8 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	if state != domain.AvailabilityStateLocalOnly {
-		t.Fatalf("availability state = %s, want %s", state, domain.AvailabilityStateLocalOnly)
+	if state != domain.AvailabilityStateBoth {
+		t.Fatalf("availability state = %s, want %s", state, domain.AvailabilityStateBoth)
 	}
 	artifact, ok, err := store.GetArtifact(context.Background(), "sample-1", "producer-a", "dataset")
 	if err != nil {
@@ -169,6 +169,99 @@ func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 	}, "node-b")
 	if err == nil {
 		t.Fatal("resolve handoff error = nil, want digest mismatch error")
+	}
+}
+
+func TestRegisterArtifactRemoteOnlyWhenNoNodeName(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	state, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-remote",
+		ProducerNodeID: "producer-a",
+		OutputName:     "dataset",
+		URI:            "s3://bucket/path/dataset",
+	})
+	if err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	if state != domain.AvailabilityStateRemoteOnly {
+		t.Fatalf("availability state = %s, want %s", state, domain.AvailabilityStateRemoteOnly)
+	}
+}
+
+func TestRegisterArtifactPopulatesCanonicalID(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "run-1",
+		ProducerNodeID: "node-a",
+		OutputName:     "output",
+		URI:            "s3://bucket/output",
+	})
+	if err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	artifact, ok, err := store.GetArtifact(context.Background(), "run-1", "node-a", "output")
+	if err != nil || !ok {
+		t.Fatalf("get artifact: %v, ok=%v", err, ok)
+	}
+	want := "run-1/node-a/output"
+	if artifact.ArtifactID != want {
+		t.Fatalf("artifactID = %q, want %q", artifact.ArtifactID, want)
+	}
+}
+
+func TestResolveHandoffRejectsUnknownConsumePolicy(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-policy",
+		ProducerNodeID: "parent-a",
+		OutputName:     "dataset",
+		NodeName:       "node-a",
+		URI:            "s3://bucket/dataset",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	_, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-policy",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      "InvalidPolicy",
+	}, "node-b")
+	if err == nil {
+		t.Fatal("resolve handoff error = nil, want unknown consume policy error")
+	}
+}
+
+func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:    "sample-nodigest",
+		ProducerNodeID: "parent-a",
+		OutputName:     "dataset",
+		NodeName:       "node-a",
+		URI:            "s3://bucket/dataset",
+		// Digest intentionally omitted
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	_, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "dataset-input",
+		SampleRunID:        "sample-nodigest",
+		ProducerNodeID:     "parent-a",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		ExpectedDigest:     "sha256:abc123",
+	}, "node-b")
+	if err == nil {
+		t.Fatal("resolve handoff error = nil, want digest unknown error")
 	}
 }
 
@@ -588,8 +681,8 @@ func TestHTTPRegisterArtifact(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if body.AvailabilityState != string(domain.AvailabilityStateLocalOnly) {
-		t.Fatalf("availabilityState = %q, want %q", body.AvailabilityState, domain.AvailabilityStateLocalOnly)
+	if body.AvailabilityState != string(domain.AvailabilityStateBoth) {
+		t.Fatalf("availabilityState = %q, want %q", body.AvailabilityState, domain.AvailabilityStateBoth)
 	}
 }
 

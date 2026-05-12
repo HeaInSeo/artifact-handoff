@@ -8,10 +8,10 @@ import (
 )
 
 type MemoryStore struct {
-	mu             sync.RWMutex
-	artifacts      map[string]domain.Artifact
-	nodeTerminals  map[string]domain.NodeTerminalRecord
-	sampleRuns     map[string]domain.SampleRunLifecycle
+	mu            sync.RWMutex
+	artifacts     map[string]domain.Artifact
+	nodeTerminals map[string]domain.NodeTerminalRecord
+	sampleRuns    map[string]domain.SampleRunLifecycle
 }
 
 func NewMemoryStore() *MemoryStore {
