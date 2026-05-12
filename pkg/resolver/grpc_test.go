@@ -40,12 +40,13 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 
 	registerResp, err := client.RegisterArtifact(ctx, &ahv1.RegisterArtifactRequest{
 		Artifact: &ahv1.ArtifactRef{
-			SampleRunId:    "sample-1",
-			ProducerNodeId: "parent-a",
-			OutputName:     "output",
-			NodeName:       "node-a",
-			Uri:            "http://artifact.local/output",
-			SizeBytes:      4096,
+			SampleRunId:       "sample-1",
+			ProducerNodeId:    "parent-a",
+			ProducerAttemptId: "attempt-1",
+			OutputName:        "output",
+			NodeName:          "node-a",
+			Uri:               "http://artifact.local/output",
+			SizeBytes:         4096,
 		},
 	})
 	if err != nil {
@@ -60,6 +61,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 			BindingName:        "dataset",
 			SampleRunId:        "sample-1",
 			ProducerNodeId:     "parent-a",
+			ProducerAttemptId:  "attempt-1",
 			ProducerOutputName: "output",
 			ConsumePolicy:      string(domain.ConsumePolicyRemoteOK),
 			Required:           true,
@@ -76,6 +78,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	if _, err := client.NotifyNodeTerminal(ctx, &ahv1.NotifyNodeTerminalRequest{
 		SampleRunId:   "sample-1",
 		NodeId:        "parent-a",
+		AttemptId:     "attempt-1",
 		TerminalState: "Succeeded",
 	}); err != nil {
 		t.Fatalf("NotifyNodeTerminal() error = %v", err)

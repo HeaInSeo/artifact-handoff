@@ -29,10 +29,10 @@ func (s *MemoryStore) PutArtifact(_ context.Context, artifact domain.Artifact) e
 	return nil
 }
 
-func (s *MemoryStore) GetArtifact(_ context.Context, sampleRunID, producerNodeID, outputName string) (domain.Artifact, bool, error) {
+func (s *MemoryStore) GetArtifact(_ context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	artifact, ok := s.artifacts[sampleRunID+"::"+producerNodeID+"::"+outputName]
+	artifact, ok := s.artifacts[sampleRunID+"/"+producerNodeID+"/"+attemptID+"/"+outputName]
 	return artifact, ok, nil
 }
 
@@ -63,14 +63,14 @@ func (s *MemoryStore) ListNodeTerminalsBySampleRun(_ context.Context, sampleRunI
 func (s *MemoryStore) RecordNodeTerminal(_ context.Context, record domain.NodeTerminalRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.nodeTerminals[record.SampleRunID+"::"+record.NodeID] = record
+	s.nodeTerminals[record.SampleRunID+"/"+record.NodeID+"/"+record.AttemptID] = record
 	return nil
 }
 
-func (s *MemoryStore) GetNodeTerminal(_ context.Context, sampleRunID, nodeID string) (domain.NodeTerminalRecord, bool, error) {
+func (s *MemoryStore) GetNodeTerminal(_ context.Context, sampleRunID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	record, ok := s.nodeTerminals[sampleRunID+"::"+nodeID]
+	record, ok := s.nodeTerminals[sampleRunID+"/"+nodeID+"/"+attemptID]
 	return record, ok, nil
 }
 

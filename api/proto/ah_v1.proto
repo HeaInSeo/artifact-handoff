@@ -13,6 +13,7 @@ message ArtifactRef {
   string node_name = 6;
   string uri = 7;
   int64 size_bytes = 8;
+  string producer_attempt_id = 9;
 }
 
 message RegisterArtifactRequest {
@@ -34,6 +35,8 @@ message ArtifactBinding {
   bool required = 8;
   string expected_digest = 9;
   string artifact_id = 10;
+  string producer_attempt_id = 11;
+  string child_attempt_id = 12;
 }
 
 message ResolveHandoffRequest {
@@ -53,6 +56,7 @@ message NotifyNodeTerminalRequest {
   string sample_run_id = 1;
   string node_id = 2;
   string terminal_state = 3;
+  string attempt_id = 4;
 }
 
 message NotifyNodeTerminalResponse {

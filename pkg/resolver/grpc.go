@@ -24,14 +24,15 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 	s.service.Metrics().IncGRPCRegisterArtifact()
 	artifact := req.GetArtifact()
 	state, err := s.service.RegisterArtifactCore(ctx, domain.Artifact{
-		SampleRunID:    artifact.GetSampleRunId(),
-		ProducerNodeID: artifact.GetProducerNodeId(),
-		OutputName:     artifact.GetOutputName(),
-		ArtifactID:     artifact.GetArtifactId(),
-		Digest:         artifact.GetDigest(),
-		NodeName:       artifact.GetNodeName(),
-		URI:            artifact.GetUri(),
-		SizeBytes:      artifact.GetSizeBytes(),
+		SampleRunID:       artifact.GetSampleRunId(),
+		ProducerNodeID:    artifact.GetProducerNodeId(),
+		ProducerAttemptID: artifact.GetProducerAttemptId(),
+		OutputName:        artifact.GetOutputName(),
+		ArtifactID:        artifact.GetArtifactId(),
+		Digest:            artifact.GetDigest(),
+		NodeName:          artifact.GetNodeName(),
+		URI:               artifact.GetUri(),
+		SizeBytes:         artifact.GetSizeBytes(),
 	})
 	if err != nil {
 		s.service.Metrics().IncGRPCRegisterArtifactErrors()
@@ -49,6 +50,8 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 		ChildNodeID:        binding.GetChildNodeId(),
 		ChildInputName:     binding.GetChildInputName(),
 		ProducerNodeID:     binding.GetProducerNodeId(),
+		ProducerAttemptID:  binding.GetProducerAttemptId(),
+		ChildAttemptID:     binding.GetChildAttemptId(),
 		ProducerOutputName: binding.GetProducerOutputName(),
 		ArtifactID:         binding.GetArtifactId(),
 		ConsumePolicy:      domain.ConsumePolicy(binding.GetConsumePolicy()),
@@ -70,7 +73,7 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 
 func (s *grpcResolverServer) NotifyNodeTerminal(ctx context.Context, req *ahv1.NotifyNodeTerminalRequest) (*ahv1.NotifyNodeTerminalResponse, error) {
 	s.service.Metrics().IncGRPCNotifyNodeTerminal()
-	if err := s.service.NotifyNodeTerminalCore(ctx, req.GetSampleRunId(), req.GetNodeId(), req.GetTerminalState()); err != nil {
+	if err := s.service.NotifyNodeTerminalCore(ctx, req.GetSampleRunId(), req.GetNodeId(), req.GetAttemptId(), req.GetTerminalState()); err != nil {
 		return nil, err
 	}
 	return &ahv1.NotifyNodeTerminalResponse{Accepted: true}, nil

@@ -57,6 +57,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			r.Context(),
 			r.URL.Query().Get("sampleRunId"),
 			r.URL.Query().Get("producerNodeId"),
+			r.URL.Query().Get("attemptId"),
 			r.URL.Query().Get("outputName"),
 		)
 		if err != nil {
@@ -109,13 +110,14 @@ func NewHTTPHandler(service *Service) http.Handler {
 		var req struct {
 			SampleRunID   string `json:"sampleRunId"`
 			NodeID        string `json:"nodeId"`
+			AttemptID     string `json:"attemptId"`
 			TerminalState string `json:"terminalState"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := service.NotifyNodeTerminalCore(r.Context(), req.SampleRunID, req.NodeID, req.TerminalState); err != nil {
+		if err := service.NotifyNodeTerminalCore(r.Context(), req.SampleRunID, req.NodeID, req.AttemptID, req.TerminalState); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

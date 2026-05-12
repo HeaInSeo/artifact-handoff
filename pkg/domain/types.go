@@ -50,25 +50,26 @@ const (
 )
 
 type Artifact struct {
-	SampleRunID    string    `json:"sampleRunId"`
-	ProducerNodeID string    `json:"producerNodeId"`
-	OutputName     string    `json:"outputName"`
-	ArtifactID     string    `json:"artifactId,omitempty"`
-	Digest         string    `json:"digest,omitempty"`
-	NodeName       string    `json:"nodeName,omitempty"`
-	URI            string    `json:"uri,omitempty"`
-	SizeBytes      int64     `json:"sizeBytes,omitempty"`
-	CreatedAt      time.Time `json:"createdAt,omitempty"`
+	SampleRunID       string    `json:"sampleRunId"`
+	ProducerNodeID    string    `json:"producerNodeId"`
+	ProducerAttemptID string    `json:"producerAttemptId"`
+	OutputName        string    `json:"outputName"`
+	ArtifactID        string    `json:"artifactId,omitempty"`
+	Digest            string    `json:"digest,omitempty"`
+	NodeName          string    `json:"nodeName,omitempty"`
+	URI               string    `json:"uri,omitempty"`
+	SizeBytes         int64     `json:"sizeBytes,omitempty"`
+	CreatedAt         time.Time `json:"createdAt,omitempty"`
 }
 
 func (a Artifact) Key() string {
-	return artifactKey(a.SampleRunID, a.ProducerNodeID, a.OutputName)
+	return artifactKey(a.SampleRunID, a.ProducerNodeID, a.ProducerAttemptID, a.OutputName)
 }
 
 // CanonicalID returns the product-owned artifact identity.
-// Format: sampleRunId/producerNodeId/outputName
+// Format: sampleRunId/producerNodeId/producerAttemptId/outputName
 func (a Artifact) CanonicalID() string {
-	return a.SampleRunID + "/" + a.ProducerNodeID + "/" + a.OutputName
+	return a.SampleRunID + "/" + a.ProducerNodeID + "/" + a.ProducerAttemptID + "/" + a.OutputName
 }
 
 type Binding struct {
@@ -77,6 +78,8 @@ type Binding struct {
 	ChildNodeID        string        `json:"childNodeId,omitempty"`
 	ChildInputName     string        `json:"childInputName,omitempty"`
 	ProducerNodeID     string        `json:"producerNodeId"`
+	ProducerAttemptID  string        `json:"producerAttemptId"`
+	ChildAttemptID     string        `json:"childAttemptId,omitempty"`
 	ProducerOutputName string        `json:"producerOutputName"`
 	ArtifactID         string        `json:"artifactId,omitempty"`
 	ConsumePolicy      ConsumePolicy `json:"consumePolicy,omitempty"`
@@ -85,7 +88,7 @@ type Binding struct {
 }
 
 func (b Binding) Key() string {
-	return artifactKey(b.SampleRunID, b.ProducerNodeID, b.ProducerOutputName)
+	return artifactKey(b.SampleRunID, b.ProducerNodeID, b.ProducerAttemptID, b.ProducerOutputName)
 }
 
 type ResolvedHandoff struct {
@@ -99,6 +102,7 @@ type ResolvedHandoff struct {
 type NodeTerminalRecord struct {
 	SampleRunID   string    `json:"sampleRunId"`
 	NodeID        string    `json:"nodeId"`
+	AttemptID     string    `json:"attemptId"`
 	TerminalState string    `json:"terminalState"`
 	RecordedAt    time.Time `json:"recordedAt"`
 }
@@ -121,6 +125,6 @@ type SampleRunLifecycle struct {
 	RetainedArtifactBytes int64         `json:"retainedArtifactBytes,omitempty"`
 }
 
-func artifactKey(sampleRunID, producerNodeID, outputName string) string {
-	return sampleRunID + "::" + producerNodeID + "::" + outputName
+func artifactKey(sampleRunID, producerNodeID, attemptID, outputName string) string {
+	return sampleRunID + "/" + producerNodeID + "/" + attemptID + "/" + outputName
 }

@@ -44,12 +44,13 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	service := newTestService(t, store)
 
 	state, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-1",
-		ProducerNodeID: "producer-a",
-		OutputName:     "dataset",
-		NodeName:       "node-a",
-		URI:            "jumi://runs/run-1/nodes/producer-a/outputs/dataset",
-		SizeBytes:      2048,
+		SampleRunID:       "sample-1",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		URI:               "jumi://runs/run-1/nodes/producer-a/outputs/dataset",
+		SizeBytes:         2048,
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -57,7 +58,7 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	if state != domain.AvailabilityStateBoth {
 		t.Fatalf("availability state = %s, want %s", state, domain.AvailabilityStateBoth)
 	}
-	artifact, ok, err := store.GetArtifact(context.Background(), "sample-1", "producer-a", "dataset")
+	artifact, ok, err := store.GetArtifact(context.Background(), "sample-1", "producer-a", "attempt-1", "dataset")
 	if err != nil {
 		t.Fatalf("get artifact: %v", err)
 	}
@@ -79,12 +80,13 @@ func TestResolveHandoffLocalReuse(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-1",
-		ProducerNodeID: "parent-a",
-		OutputName:     "model",
-		NodeName:       "node-a",
-		URI:            "file:///cache/model",
-		Digest:         "sha256:abc",
+		SampleRunID:       "sample-1",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "model",
+		NodeName:          "node-a",
+		URI:               "file:///cache/model",
+		Digest:            "sha256:abc",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -94,6 +96,7 @@ func TestResolveHandoffLocalReuse(t *testing.T) {
 		BindingName:        "model-input",
 		SampleRunID:        "sample-1",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "model",
 		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
 		Required:           true,
@@ -114,11 +117,12 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-1",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		NodeName:       "node-a",
-		URI:            "http://artifact.local/dataset",
+		SampleRunID:       "sample-1",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		URI:               "http://artifact.local/dataset",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -128,6 +132,7 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-1",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		Required:           true,
@@ -147,12 +152,13 @@ func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-digest",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		NodeName:       "node-a",
-		URI:            "http://artifact.local/dataset",
-		Digest:         "sha256:actual",
+		SampleRunID:       "sample-digest",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		URI:               "http://artifact.local/dataset",
+		Digest:            "sha256:actual",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -162,6 +168,7 @@ func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-digest",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		Required:           true,
@@ -177,10 +184,11 @@ func TestRegisterArtifactRemoteOnlyWhenNoNodeName(t *testing.T) {
 	service := newTestService(t, store)
 
 	state, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-remote",
-		ProducerNodeID: "producer-a",
-		OutputName:     "dataset",
-		URI:            "s3://bucket/path/dataset",
+		SampleRunID:       "sample-remote",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		URI:               "s3://bucket/path/dataset",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -195,19 +203,20 @@ func TestRegisterArtifactPopulatesCanonicalID(t *testing.T) {
 	service := newTestService(t, store)
 
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "run-1",
-		ProducerNodeID: "node-a",
-		OutputName:     "output",
-		URI:            "s3://bucket/output",
+		SampleRunID:       "run-1",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		URI:               "s3://bucket/output",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	artifact, ok, err := store.GetArtifact(context.Background(), "run-1", "node-a", "output")
+	artifact, ok, err := store.GetArtifact(context.Background(), "run-1", "node-a", "attempt-1", "output")
 	if err != nil || !ok {
 		t.Fatalf("get artifact: %v, ok=%v", err, ok)
 	}
-	want := "run-1/node-a/output"
+	want := "run-1/node-a/attempt-1/output"
 	if artifact.ArtifactID != want {
 		t.Fatalf("artifactID = %q, want %q", artifact.ArtifactID, want)
 	}
@@ -217,11 +226,12 @@ func TestResolveHandoffRejectsUnknownConsumePolicy(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-policy",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		NodeName:       "node-a",
-		URI:            "s3://bucket/dataset",
+		SampleRunID:       "sample-policy",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		URI:               "s3://bucket/dataset",
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
@@ -230,6 +240,7 @@ func TestResolveHandoffRejectsUnknownConsumePolicy(t *testing.T) {
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-policy",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      "InvalidPolicy",
 	}, "node-b")
@@ -242,11 +253,12 @@ func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-nodigest",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		NodeName:       "node-a",
-		URI:            "s3://bucket/dataset",
+		SampleRunID:       "sample-nodigest",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		URI:               "s3://bucket/dataset",
 		// Digest intentionally omitted
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -256,6 +268,7 @@ func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-nodigest",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		ExpectedDigest:     "sha256:abc123",
@@ -273,6 +286,7 @@ func TestResolveHandoffReturnsPendingWhenProducerNotTerminalAndArtifactMissing(t
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-pending",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		Required:           true,
@@ -291,7 +305,7 @@ func TestResolveHandoffReturnsPendingWhenProducerNotTerminalAndArtifactMissing(t
 func TestResolveHandoffReturnsMissingWhenProducerSucceededButArtifactMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-missing", "parent-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-missing", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 
@@ -299,6 +313,7 @@ func TestResolveHandoffReturnsMissingWhenProducerSucceededButArtifactMissing(t *
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-missing",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		Required:           true,
@@ -317,7 +332,7 @@ func TestResolveHandoffReturnsMissingWhenProducerSucceededButArtifactMissing(t *
 func TestResolveHandoffReturnsProducerFailedWhenProducerFailedAndArtifactMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-producer-failed", "parent-a", "Failed"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-producer-failed", "parent-a", "attempt-1", "Failed"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 
@@ -325,6 +340,7 @@ func TestResolveHandoffReturnsProducerFailedWhenProducerFailedAndArtifactMissing
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-producer-failed",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		Required:           true,
@@ -346,15 +362,16 @@ func TestResolveHandoffReturnsMissingWhenSampleAlreadyGCEligible(t *testing.T) {
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-gc",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		NodeName:       "node-a",
-		URI:            "http://artifact.local/dataset",
+		SampleRunID:       "sample-gc",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		URI:               "http://artifact.local/dataset",
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-gc", "parent-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-gc", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 	if err := service.FinalizeSampleRun(context.Background(), "sample-gc"); err != nil {
@@ -369,6 +386,7 @@ func TestResolveHandoffReturnsMissingWhenSampleAlreadyGCEligible(t *testing.T) {
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-gc",
 		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		Required:           true,
@@ -388,10 +406,10 @@ func TestNotifyNodeTerminalRecordsState(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
-	record, ok, err := store.GetNodeTerminal(context.Background(), "sample-1", "child-a")
+	record, ok, err := store.GetNodeTerminal(context.Background(), "sample-1", "child-a", "attempt-1")
 	if err != nil {
 		t.Fatalf("get node terminal: %v", err)
 	}
@@ -407,7 +425,7 @@ func TestNotifyNodeTerminalRejectsUnsupportedState(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "Running"); err == nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "child-a", "attempt-1", "Running"); err == nil {
 		t.Fatal("expected unsupported terminal state to fail")
 	}
 }
@@ -418,15 +436,16 @@ func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 	fixedNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return fixedNow }
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-1",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		SizeBytes:      2048,
+		SampleRunID:       "sample-1",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		SizeBytes:         2048,
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "parent-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 	if err := service.FinalizeSampleRun(context.Background(), "sample-1"); err != nil {
@@ -474,14 +493,15 @@ func TestEvaluateGCSetsEligibility(t *testing.T) {
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-1",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		SizeBytes:      2048,
+		SampleRunID:       "sample-1",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		SizeBytes:         2048,
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "parent-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-1", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 	if err := service.FinalizeSampleRun(context.Background(), "sample-1"); err != nil {
@@ -516,9 +536,10 @@ func TestEvaluateGCBlocksWhenTerminalNodesMissing(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-2",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
+		SampleRunID:       "sample-2",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
@@ -570,13 +591,14 @@ func TestEvaluateGCBlocksWhenRetentionWindowActive(t *testing.T) {
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-3",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
+		SampleRunID:       "sample-3",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-3", "parent-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-3", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 	if err := service.FinalizeSampleRun(context.Background(), "sample-3"); err != nil {
@@ -610,14 +632,15 @@ func TestEvaluateGCRefreshesStaleLifecycleSnapshot(t *testing.T) {
 	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
 	service.now = func() time.Time { return baseNow }
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-stale",
-		ProducerNodeID: "parent-a",
-		OutputName:     "dataset",
-		SizeBytes:      3072,
+		SampleRunID:       "sample-stale",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		SizeBytes:         3072,
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
-	if err := service.NotifyNodeTerminal(context.Background(), "sample-stale", "parent-a", "Succeeded"); err != nil {
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-stale", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
 	stale := domain.SampleRunLifecycle{
@@ -665,6 +688,7 @@ func TestHTTPRegisterArtifact(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
 		"sampleRunID":"sample-http",
 		"producerNodeID":"producer-a",
+		"producerAttemptId":"attempt-1",
 		"outputName":"result.json",
 		"nodeName":"node-a",
 		"uri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
@@ -695,6 +719,7 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 		"artifact": {
 			"sampleRunId":"sample-http-env",
 			"producerNodeId":"producer-a",
+			"producerAttemptId":"attempt-1",
 			"outputName":"result.json",
 			"artifactId":"sample-http-env:producer-a:result.json",
 			"nodeName":"node-a",
@@ -707,7 +732,7 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 	if resp.Code != http.StatusOK {
 		t.Fatalf("register status = %d, want 200", resp.Code)
 	}
-	artifact, ok, err := store.GetArtifact(context.Background(), "sample-http-env", "producer-a", "result.json")
+	artifact, ok, err := store.GetArtifact(context.Background(), "sample-http-env", "producer-a", "attempt-1", "result.json")
 	if err != nil {
 		t.Fatalf("get artifact: %v", err)
 	}
@@ -725,19 +750,20 @@ func TestHTTPGetArtifact(t *testing.T) {
 	handler := NewHTTPHandler(service)
 
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:    "sample-http-get",
-		ProducerNodeID: "producer-a",
-		OutputName:     "report",
-		ArtifactID:     "sample-http-get:producer-a:report",
-		Digest:         "sha256:abc123",
-		NodeName:       "node-a",
-		URI:            "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
-		SizeBytes:      4096,
+		SampleRunID:       "sample-http-get",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "report",
+		ArtifactID:        "sample-http-get:producer-a:report",
+		Digest:            "sha256:abc123",
+		NodeName:          "node-a",
+		URI:               "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
+		SizeBytes:         4096,
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=sample-http-get&producerNodeId=producer-a&outputName=report", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=sample-http-get&producerNodeId=producer-a&attemptId=attempt-1&outputName=report", nil)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {
@@ -762,7 +788,7 @@ func TestHTTPGetArtifactReturnsNotFound(t *testing.T) {
 	service := newTestService(t, store)
 	handler := NewHTTPHandler(service)
 
-	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=missing&producerNodeId=producer-a&outputName=report", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/artifacts:get?sampleRunId=missing&producerNodeId=producer-a&attemptId=attempt-1&outputName=report", nil)
 	resp := httptest.NewRecorder()
 	handler.ServeHTTP(resp, req)
 	if resp.Code != http.StatusNotFound {
@@ -777,22 +803,24 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 
 	for _, artifact := range []domain.Artifact{
 		{
-			SampleRunID:    "sample-http-list",
-			ProducerNodeID: "producer-a",
-			OutputName:     "report",
-			ArtifactID:     "sample-http-list:producer-a:report",
-			Digest:         "sha256:one",
-			URI:            "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
-			SizeBytes:      512,
+			SampleRunID:       "sample-http-list",
+			ProducerNodeID:    "producer-a",
+			ProducerAttemptID: "attempt-1",
+			OutputName:        "report",
+			ArtifactID:        "sample-http-list:producer-a:report",
+			Digest:            "sha256:one",
+			URI:               "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
+			SizeBytes:         512,
 		},
 		{
-			SampleRunID:    "sample-http-list",
-			ProducerNodeID: "producer-b",
-			OutputName:     "metrics",
-			ArtifactID:     "sample-http-list:producer-b:metrics",
-			Digest:         "sha256:two",
-			URI:            "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
-			SizeBytes:      128,
+			SampleRunID:       "sample-http-list",
+			ProducerNodeID:    "producer-b",
+			ProducerAttemptID: "attempt-1",
+			OutputName:        "metrics",
+			ArtifactID:        "sample-http-list:producer-b:metrics",
+			Digest:            "sha256:two",
+			URI:               "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
+			SizeBytes:         128,
 		},
 	} {
 		if _, err := service.RegisterArtifact(context.Background(), artifact); err != nil {

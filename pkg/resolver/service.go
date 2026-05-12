@@ -44,8 +44,8 @@ func (s *Service) ResolveHandoff(ctx context.Context, binding domain.Binding, ta
 	return s.ResolveHandoffCore(ctx, binding, targetNodeName)
 }
 
-func (s *Service) NotifyNodeTerminal(ctx context.Context, sampleRunID, nodeID, terminalState string) error {
-	return s.NotifyNodeTerminalCore(ctx, sampleRunID, nodeID, terminalState)
+func (s *Service) NotifyNodeTerminal(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {
+	return s.NotifyNodeTerminalCore(ctx, sampleRunID, nodeID, attemptID, terminalState)
 }
 
 func (s *Service) FinalizeSampleRun(ctx context.Context, sampleRunID string) error {
@@ -60,8 +60,8 @@ func (s *Service) GetSampleRunLifecycle(ctx context.Context, sampleRunID string)
 	return s.GetSampleRunLifecycleCore(ctx, sampleRunID)
 }
 
-func (s *Service) GetArtifact(ctx context.Context, sampleRunID, producerNodeID, outputName string) (domain.Artifact, bool, error) {
-	return s.GetArtifactCore(ctx, sampleRunID, producerNodeID, outputName)
+func (s *Service) GetArtifact(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
+	return s.GetArtifactCore(ctx, sampleRunID, producerNodeID, attemptID, outputName)
 }
 
 func (s *Service) ListArtifactsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
@@ -71,6 +71,9 @@ func (s *Service) ListArtifactsBySampleRun(ctx context.Context, sampleRunID stri
 func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Artifact) (domain.AvailabilityState, error) {
 	if artifact.SampleRunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
 		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
+	}
+	if artifact.ProducerAttemptID == "" {
+		return "", fmt.Errorf("producerAttemptID is required")
 	}
 	if artifact.CreatedAt.IsZero() {
 		artifact.CreatedAt = s.now()
@@ -94,11 +97,11 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	}
 }
 
-func (s *Service) GetArtifactCore(ctx context.Context, sampleRunID, producerNodeID, outputName string) (domain.Artifact, bool, error) {
+func (s *Service) GetArtifactCore(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
 	if sampleRunID == "" || producerNodeID == "" || outputName == "" {
 		return domain.Artifact{}, false, fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
 	}
-	return s.store.GetArtifact(ctx, sampleRunID, producerNodeID, outputName)
+	return s.store.GetArtifact(ctx, sampleRunID, producerNodeID, attemptID, outputName)
 }
 
 func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
@@ -126,12 +129,12 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Decision: domain.ResolutionDecisionUnavailable,
 		}, nil
 	}
-	artifact, ok, err := s.store.GetArtifact(ctx, binding.SampleRunID, binding.ProducerNodeID, binding.ProducerOutputName)
+	artifact, ok, err := s.store.GetArtifact(ctx, binding.SampleRunID, binding.ProducerNodeID, binding.ProducerAttemptID, binding.ProducerOutputName)
 	if err != nil {
 		return domain.ResolvedHandoff{}, err
 	}
 	if !ok {
-		terminal, terminalFound, err := s.store.GetNodeTerminal(ctx, binding.SampleRunID, binding.ProducerNodeID)
+		terminal, terminalFound, err := s.store.GetNodeTerminal(ctx, binding.SampleRunID, binding.ProducerNodeID, binding.ProducerAttemptID)
 		if err != nil {
 			return domain.ResolvedHandoff{}, err
 		}
@@ -199,9 +202,12 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	}
 }
 
-func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, terminalState string) error {
+func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {
 	if sampleRunID == "" || nodeID == "" || terminalState == "" {
 		return fmt.Errorf("sampleRunID, nodeID, terminalState are required")
+	}
+	if attemptID == "" {
+		return fmt.Errorf("attemptID is required")
 	}
 	switch terminalState {
 	case "Succeeded", "Failed", "Canceled":
@@ -211,6 +217,7 @@ func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeI
 	return s.store.RecordNodeTerminal(ctx, domain.NodeTerminalRecord{
 		SampleRunID:   sampleRunID,
 		NodeID:        nodeID,
+		AttemptID:     attemptID,
 		TerminalState: terminalState,
 		RecordedAt:    s.now(),
 	})

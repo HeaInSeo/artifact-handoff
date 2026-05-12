@@ -22,17 +22,18 @@ const (
 )
 
 type ArtifactRef struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	SampleRunId    string                 `protobuf:"bytes,1,opt,name=sample_run_id,json=sampleRunId,proto3" json:"sample_run_id,omitempty"`
-	ProducerNodeId string                 `protobuf:"bytes,2,opt,name=producer_node_id,json=producerNodeId,proto3" json:"producer_node_id,omitempty"`
-	OutputName     string                 `protobuf:"bytes,3,opt,name=output_name,json=outputName,proto3" json:"output_name,omitempty"`
-	ArtifactId     string                 `protobuf:"bytes,4,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
-	Digest         string                 `protobuf:"bytes,5,opt,name=digest,proto3" json:"digest,omitempty"`
-	NodeName       string                 `protobuf:"bytes,6,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
-	Uri            string                 `protobuf:"bytes,7,opt,name=uri,proto3" json:"uri,omitempty"`
-	SizeBytes      int64                  `protobuf:"varint,8,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	SampleRunId       string                 `protobuf:"bytes,1,opt,name=sample_run_id,json=sampleRunId,proto3" json:"sample_run_id,omitempty"`
+	ProducerNodeId    string                 `protobuf:"bytes,2,opt,name=producer_node_id,json=producerNodeId,proto3" json:"producer_node_id,omitempty"`
+	OutputName        string                 `protobuf:"bytes,3,opt,name=output_name,json=outputName,proto3" json:"output_name,omitempty"`
+	ArtifactId        string                 `protobuf:"bytes,4,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	Digest            string                 `protobuf:"bytes,5,opt,name=digest,proto3" json:"digest,omitempty"`
+	NodeName          string                 `protobuf:"bytes,6,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	Uri               string                 `protobuf:"bytes,7,opt,name=uri,proto3" json:"uri,omitempty"`
+	SizeBytes         int64                  `protobuf:"varint,8,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	ProducerAttemptId string                 `protobuf:"bytes,9,opt,name=producer_attempt_id,json=producerAttemptId,proto3" json:"producer_attempt_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ArtifactRef) Reset() {
@@ -119,6 +120,13 @@ func (x *ArtifactRef) GetSizeBytes() int64 {
 		return x.SizeBytes
 	}
 	return 0
+}
+
+func (x *ArtifactRef) GetProducerAttemptId() string {
+	if x != nil {
+		return x.ProducerAttemptId
+	}
+	return ""
 }
 
 type RegisterArtifactRequest struct {
@@ -221,6 +229,8 @@ type ArtifactBinding struct {
 	Required           bool                   `protobuf:"varint,8,opt,name=required,proto3" json:"required,omitempty"`
 	ExpectedDigest     string                 `protobuf:"bytes,9,opt,name=expected_digest,json=expectedDigest,proto3" json:"expected_digest,omitempty"`
 	ArtifactId         string                 `protobuf:"bytes,10,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	ProducerAttemptId  string                 `protobuf:"bytes,11,opt,name=producer_attempt_id,json=producerAttemptId,proto3" json:"producer_attempt_id,omitempty"`
+	ChildAttemptId     string                 `protobuf:"bytes,12,opt,name=child_attempt_id,json=childAttemptId,proto3" json:"child_attempt_id,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -321,6 +331,20 @@ func (x *ArtifactBinding) GetExpectedDigest() string {
 func (x *ArtifactBinding) GetArtifactId() string {
 	if x != nil {
 		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ArtifactBinding) GetProducerAttemptId() string {
+	if x != nil {
+		return x.ProducerAttemptId
+	}
+	return ""
+}
+
+func (x *ArtifactBinding) GetChildAttemptId() string {
+	if x != nil {
+		return x.ChildAttemptId
 	}
 	return ""
 }
@@ -458,6 +482,7 @@ type NotifyNodeTerminalRequest struct {
 	SampleRunId   string                 `protobuf:"bytes,1,opt,name=sample_run_id,json=sampleRunId,proto3" json:"sample_run_id,omitempty"`
 	NodeId        string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	TerminalState string                 `protobuf:"bytes,3,opt,name=terminal_state,json=terminalState,proto3" json:"terminal_state,omitempty"`
+	AttemptId     string                 `protobuf:"bytes,4,opt,name=attempt_id,json=attemptId,proto3" json:"attempt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -509,6 +534,13 @@ func (x *NotifyNodeTerminalRequest) GetNodeId() string {
 func (x *NotifyNodeTerminalRequest) GetTerminalState() string {
 	if x != nil {
 		return x.TerminalState
+	}
+	return ""
+}
+
+func (x *NotifyNodeTerminalRequest) GetAttemptId() string {
+	if x != nil {
+		return x.AttemptId
 	}
 	return ""
 }
@@ -937,7 +969,7 @@ var File_api_proto_ah_v1_proto protoreflect.FileDescriptor
 
 const file_api_proto_ah_v1_proto_rawDesc = "" +
 	"\n" +
-	"\x15api/proto/ah_v1.proto\x12\x05ah.v1\"\x83\x02\n" +
+	"\x15api/proto/ah_v1.proto\x12\x05ah.v1\"\xb3\x02\n" +
 	"\vArtifactRef\x12\"\n" +
 	"\rsample_run_id\x18\x01 \x01(\tR\vsampleRunId\x12(\n" +
 	"\x10producer_node_id\x18\x02 \x01(\tR\x0eproducerNodeId\x12\x1f\n" +
@@ -949,11 +981,12 @@ const file_api_proto_ah_v1_proto_rawDesc = "" +
 	"\tnode_name\x18\x06 \x01(\tR\bnodeName\x12\x10\n" +
 	"\x03uri\x18\a \x01(\tR\x03uri\x12\x1d\n" +
 	"\n" +
-	"size_bytes\x18\b \x01(\x03R\tsizeBytes\"I\n" +
+	"size_bytes\x18\b \x01(\x03R\tsizeBytes\x12.\n" +
+	"\x13producer_attempt_id\x18\t \x01(\tR\x11producerAttemptId\"I\n" +
 	"\x17RegisterArtifactRequest\x12.\n" +
 	"\bartifact\x18\x01 \x01(\v2\x12.ah.v1.ArtifactRefR\bartifact\"I\n" +
 	"\x18RegisterArtifactResponse\x12-\n" +
-	"\x12availability_state\x18\x01 \x01(\tR\x11availabilityState\"\x8f\x03\n" +
+	"\x12availability_state\x18\x01 \x01(\tR\x11availabilityState\"\xe9\x03\n" +
 	"\x0fArtifactBinding\x12!\n" +
 	"\fbinding_name\x18\x01 \x01(\tR\vbindingName\x12\"\n" +
 	"\rsample_run_id\x18\x02 \x01(\tR\vsampleRunId\x12\"\n" +
@@ -966,7 +999,9 @@ const file_api_proto_ah_v1_proto_rawDesc = "" +
 	"\x0fexpected_digest\x18\t \x01(\tR\x0eexpectedDigest\x12\x1f\n" +
 	"\vartifact_id\x18\n" +
 	" \x01(\tR\n" +
-	"artifactId\"s\n" +
+	"artifactId\x12.\n" +
+	"\x13producer_attempt_id\x18\v \x01(\tR\x11producerAttemptId\x12(\n" +
+	"\x10child_attempt_id\x18\f \x01(\tR\x0echildAttemptId\"s\n" +
 	"\x15ResolveHandoffRequest\x120\n" +
 	"\abinding\x18\x01 \x01(\v2\x16.ah.v1.ArtifactBindingR\abinding\x12(\n" +
 	"\x10target_node_name\x18\x02 \x01(\tR\x0etargetNodeName\"\xe9\x01\n" +
@@ -975,11 +1010,13 @@ const file_api_proto_ah_v1_proto_rawDesc = "" +
 	"\bdecision\x18\x02 \x01(\tR\bdecision\x12(\n" +
 	"\x10source_node_name\x18\x03 \x01(\tR\x0esourceNodeName\x12!\n" +
 	"\fartifact_uri\x18\x04 \x01(\tR\vartifactUri\x129\n" +
-	"\x18requires_materialization\x18\x05 \x01(\bR\x17requiresMaterialization\"\x7f\n" +
+	"\x18requires_materialization\x18\x05 \x01(\bR\x17requiresMaterialization\"\x9e\x01\n" +
 	"\x19NotifyNodeTerminalRequest\x12\"\n" +
 	"\rsample_run_id\x18\x01 \x01(\tR\vsampleRunId\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12%\n" +
-	"\x0eterminal_state\x18\x03 \x01(\tR\rterminalState\"8\n" +
+	"\x0eterminal_state\x18\x03 \x01(\tR\rterminalState\x12\x1d\n" +
+	"\n" +
+	"attempt_id\x18\x04 \x01(\tR\tattemptId\"8\n" +
 	"\x1aNotifyNodeTerminalResponse\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\">\n" +
 	"\x18FinalizeSampleRunRequest\x12\"\n" +
