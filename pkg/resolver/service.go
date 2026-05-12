@@ -78,18 +78,28 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	if artifact.CreatedAt.IsZero() {
 		artifact.CreatedAt = s.now()
 	}
+	// ArtifactID must equal the canonical identity string.
+	canonical := artifact.CanonicalID()
 	if artifact.ArtifactID == "" {
-		artifact.ArtifactID = artifact.CanonicalID()
+		artifact.ArtifactID = canonical
+	} else if artifact.ArtifactID != canonical {
+		return "", fmt.Errorf("artifactID %q does not match canonical ID %q", artifact.ArtifactID, canonical)
 	}
 	// Enforce artifact immutability: same key + same digest = idempotent OK;
-	// same key + different digest = conflict error.
+	// same key + different digest, or clearing an existing digest = conflict error.
 	existing, exists, err := s.store.GetArtifact(ctx, artifact.SampleRunID, artifact.ProducerNodeID, artifact.ProducerAttemptID, artifact.OutputName)
 	if err != nil {
 		return "", err
 	}
-	if exists && existing.Digest != "" && artifact.Digest != "" && existing.Digest != artifact.Digest {
-		return "", fmt.Errorf("artifact %s already registered with digest %s; rejecting re-registration with digest %s",
-			artifact.Key(), existing.Digest, artifact.Digest)
+	if exists && existing.Digest != "" {
+		if artifact.Digest == "" {
+			return "", fmt.Errorf("artifact %s already registered with digest %s; refusing to clear digest",
+				artifact.Key(), existing.Digest)
+		}
+		if artifact.Digest != existing.Digest {
+			return "", fmt.Errorf("artifact %s already registered with digest %s; rejecting re-registration with digest %s",
+				artifact.Key(), existing.Digest, artifact.Digest)
+		}
 	}
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
 		return "", err
@@ -237,10 +247,19 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		return mp
 	}
 
-	// targetNodeName is known → post-scheduling check: test whether the consumer
-	// is actually co-located with the producer.
+	// targetNodeName is known → post-scheduling check.
 	if targetNodeName != "" {
 		if artifact.NodeName != "" && targetNodeName == artifact.NodeName {
+			if artifact.URI == "" {
+				return domain.ResolvedHandoff{
+					Status:              domain.ResolutionStatusMissing,
+					Decision:            domain.ResolutionDecisionUnavailable,
+					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+					Reason:              "artifact URI unknown; cannot provide local reuse plan",
+					Retryable:           false,
+				}, nil
+			}
 			return domain.ResolvedHandoff{
 				Status:   domain.ResolutionStatusResolved,
 				Decision: domain.ResolutionDecisionLocalReuse,
@@ -253,7 +272,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Retryable:           false,
 			}, nil
 		}
-		// Consumer landed on a different node than the producer.
+		// Consumer landed on a different node.
 		switch binding.ConsumePolicy {
 		case domain.ConsumePolicySameNodeOnly:
 			return domain.ResolvedHandoff{
@@ -265,6 +284,16 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Retryable:           false,
 			}, nil
 		default:
+			if artifact.URI == "" {
+				return domain.ResolvedHandoff{
+					Status:              domain.ResolutionStatusMissing,
+					Decision:            domain.ResolutionDecisionUnavailable,
+					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+					Reason:              "artifact URI unknown; cannot provide remote fetch plan",
+					Retryable:           false,
+				}, nil
+			}
 			s.metrics.IncFallback()
 			return domain.ResolvedHandoff{
 				Status:              domain.ResolutionStatusResolved,
@@ -278,10 +307,29 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	}
 
 	// targetNodeName is empty → pre-scheduling / planning mode.
-	// Return placement guidance so Spawner can construct the PodSpec before scheduling.
+	// IncFallback is NOT called here: this is a plan, not an executed fallback.
 	switch binding.ConsumePolicy {
 	case domain.ConsumePolicySameNodeOnly:
-		// Must run on the producer node; local reuse is guaranteed if scheduled correctly.
+		if artifact.NodeName == "" {
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "planning: artifact locality unknown; cannot satisfy SameNodeOnly",
+				Retryable:           false,
+			}, nil
+		}
+		if artifact.URI == "" {
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "planning: artifact URI unknown; cannot provide materialization plan",
+				Retryable:           false,
+			}, nil
+		}
 		return domain.ResolvedHandoff{
 			Status:   domain.ResolutionStatusResolved,
 			Decision: domain.ResolutionDecisionLocalReuse,
@@ -294,8 +342,27 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Retryable:           false,
 		}, nil
 	case domain.ConsumePolicySameNodeThenRemote:
-		// Prefer the producer node; fall back to remote fetch if scheduled elsewhere.
-		s.metrics.IncFallback()
+		if artifact.URI == "" {
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "planning: artifact URI unknown; cannot provide remote fetch plan",
+				Retryable:           false,
+			}, nil
+		}
+		if artifact.NodeName == "" {
+			// No locality hint; degrade to remote fetch without placement preference.
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusResolved,
+				Decision:            domain.ResolutionDecisionRemoteFetch,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: remoteMatPlan(),
+				Reason:              "planning: artifact locality unknown; remote fetch without placement hint",
+				Retryable:           false,
+			}, nil
+		}
 		return domain.ResolvedHandoff{
 			Status:   domain.ResolutionStatusResolved,
 			Decision: domain.ResolutionDecisionRemoteFetch,
@@ -308,7 +375,16 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Retryable:           false,
 		}, nil
 	default: // ConsumePolicyRemoteOK
-		s.metrics.IncFallback()
+		if artifact.URI == "" {
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "planning: artifact URI unknown; cannot provide remote fetch plan",
+				Retryable:           false,
+			}, nil
+		}
 		return domain.ResolvedHandoff{
 			Status:              domain.ResolutionStatusResolved,
 			Decision:            domain.ResolutionDecisionRemoteFetch,

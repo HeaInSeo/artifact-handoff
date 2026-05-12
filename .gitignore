@@ -3,3 +3,4 @@ bin/
 dist/
 coverage.out
 /artifact-handoff-resolver
+reports/

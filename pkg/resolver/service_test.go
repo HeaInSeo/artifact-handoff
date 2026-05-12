@@ -283,6 +283,147 @@ func TestRegisterArtifactRejectsDigestConflictForSameArtifactKey(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactRejectsDigestClearingForSameArtifactKey(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-clear",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:original",
+		URI:               "jumi://runs/run-clear/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-clear",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "", // clearing the digest must be rejected
+		URI:               "jumi://runs/run-clear/nodes/node-a/outputs/output",
+	})
+	if err == nil {
+		t.Fatal("expected error when clearing existing digest, got nil")
+	}
+}
+
+func TestRegisterArtifactRejectsNonCanonicalArtifactID(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-1",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		ArtifactID:        "run-1:node-a:output", // legacy colon format — rejected by service layer
+		URI:               "jumi://runs/run-1/nodes/node-a/outputs/output",
+	})
+	if err == nil {
+		t.Fatal("expected error for non-canonical ArtifactID, got nil")
+	}
+}
+
+func TestResolvePlanningMode_SameNodeOnly_MissingNodeName(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	// Register artifact with URI but no NodeName (REMOTE_ONLY availability).
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-nonode",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		URI:               "jumi://runs/run-nonode/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-nonode",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeOnly,
+	}, "") // planning mode
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusMissing {
+		t.Fatalf("status = %q, want MISSING (no locality to satisfy SameNodeOnly)", resolved.Status)
+	}
+}
+
+func TestResolvePlanningMode_RemoteOK_MissingURI(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	// Register artifact with NodeName but no URI (LOCAL_ONLY availability).
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-nouri",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-nouri",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+	}, "") // planning mode
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusMissing {
+		t.Fatalf("status = %q, want MISSING (no URI for remote fetch)", resolved.Status)
+	}
+}
+
+func TestResolvePlanningMode_SameNodeThenRemote_FallsBackToRemoteWhenNoNodeName(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-nonode2",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		URI:               "jumi://runs/run-nonode2/nodes/node-a/outputs/output",
+		// NodeName intentionally empty
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-nonode2",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusResolved {
+		t.Fatalf("status = %q, want RESOLVED (degrade to remote fetch)", resolved.Status)
+	}
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeNone {
+		t.Fatalf("placementIntent.mode = %q, want none (no locality hint available)", resolved.PlacementIntent.Mode)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationPlan.mode = %q, want remote_fetch", resolved.MaterializationPlan.Mode)
+	}
+}
+
 func TestResolveHandoffRejectsMissingProducerAttemptID(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -1003,8 +1144,42 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 	if !ok {
 		t.Fatal("expected stored artifact")
 	}
-	if artifact.ArtifactID != "sample-http-env:producer-a:result.json" {
-		t.Fatalf("artifactId = %q, want sample-http-env:producer-a:result.json", artifact.ArtifactID)
+	if artifact.ArtifactID != "sample-http-env/producer-a/attempt-1/result.json" {
+		t.Fatalf("artifactId = %q, want canonical artifact identity", artifact.ArtifactID)
+	}
+}
+
+func TestHTTPRegisterArtifactCanonicalizesLegacyArtifactID(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	handler := NewHTTPHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
+		"artifact": {
+			"sampleRunId":"sample-http-legacy",
+			"producerNodeId":"producer-a",
+			"producerAttemptId":"attempt-1",
+			"outputName":"result.json",
+			"artifactId":"sample-http-legacy:producer-a:result.json",
+			"nodeName":"node-a",
+			"uri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
+		}
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("register status = %d, want 200", resp.Code)
+	}
+	artifact, ok, err := store.GetArtifact(context.Background(), "sample-http-legacy", "producer-a", "attempt-1", "result.json")
+	if err != nil {
+		t.Fatalf("get artifact: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected stored artifact")
+	}
+	if artifact.ArtifactID != "sample-http-legacy/producer-a/attempt-1/result.json" {
+		t.Fatalf("artifactId = %q, want canonical artifact identity", artifact.ArtifactID)
 	}
 }
 
@@ -1018,7 +1193,7 @@ func TestHTTPGetArtifact(t *testing.T) {
 		ProducerNodeID:    "producer-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "report",
-		ArtifactID:        "sample-http-get:producer-a:report",
+		ArtifactID:        "sample-http-get/producer-a/attempt-1/report",
 		Digest:            "sha256:abc123",
 		NodeName:          "node-a",
 		URI:               "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
@@ -1071,7 +1246,7 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 			ProducerNodeID:    "producer-a",
 			ProducerAttemptID: "attempt-1",
 			OutputName:        "report",
-			ArtifactID:        "sample-http-list:producer-a:report",
+			ArtifactID:        "sample-http-list/producer-a/attempt-1/report",
 			Digest:            "sha256:one",
 			URI:               "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
 			SizeBytes:         512,
@@ -1081,7 +1256,7 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 			ProducerNodeID:    "producer-b",
 			ProducerAttemptID: "attempt-1",
 			OutputName:        "metrics",
-			ArtifactID:        "sample-http-list:producer-b:metrics",
+			ArtifactID:        "sample-http-list/producer-b/attempt-1/metrics",
 			Digest:            "sha256:two",
 			URI:               "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
 			SizeBytes:         128,

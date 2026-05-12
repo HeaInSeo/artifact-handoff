@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
 )
@@ -41,6 +42,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 				return
 			}
 		}
+		canonicalizeLegacyHTTPArtifactID(&artifact)
 		state, err := service.RegisterArtifactCore(r.Context(), artifact)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -183,4 +185,22 @@ func NewHTTPHandler(service *Service) http.Handler {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func canonicalizeLegacyHTTPArtifactID(artifact *domain.Artifact) {
+	if artifact == nil || artifact.ArtifactID == "" {
+		return
+	}
+	if artifact.ArtifactID == artifact.CanonicalID() {
+		return
+	}
+
+	legacyID := strings.Join([]string{
+		artifact.SampleRunID,
+		artifact.ProducerNodeID,
+		artifact.OutputName,
+	}, ":")
+	if artifact.ArtifactID == legacyID {
+		artifact.ArtifactID = artifact.CanonicalID()
+	}
 }

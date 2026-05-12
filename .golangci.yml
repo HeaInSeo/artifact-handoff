@@ -1,0 +1,44 @@
+version: "2"
+
+run:
+  allow-parallel-runners: true
+
+linters:
+  default: none
+  enable:
+    - depguard
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - unused
+  settings:
+    depguard:
+      rules:
+        no_k8s_in_product_core:
+          files:
+            - "api/*.go"
+            - "api/**/*.go"
+            - "cmd/*.go"
+            - "cmd/**/*.go"
+            - "pkg/*.go"
+            - "pkg/**/*.go"
+          deny:
+            - pkg: "k8s.io/**"
+              desc: "artifact-handoff product core must stay Kubernetes-independent"
+            - pkg: "sigs.k8s.io/**"
+              desc: "artifact-handoff product core must stay controller-runtime-independent"
+    revive:
+      rules:
+        - name: comment-spacings
+        - name: import-shadowing
+  exclusions:
+    generated: lax
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
