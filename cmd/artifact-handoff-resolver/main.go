@@ -18,8 +18,14 @@ import (
 func main() {
 	httpAddr := envOrDefault("AH_ADDR", ":8080")
 	grpcAddr := envOrDefault("AH_GRPC_ADDR", ":9090")
+	storeDSN := envOrDefault("AH_STORE_DSN", "memory")
 
-	store := inventory.NewMemoryStore()
+	store, closeStore, err := inventory.OpenStore(storeDSN)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer closeStore()
+
 	service, err := resolver.NewService(store)
 	if err != nil {
 		log.Fatal(err)
