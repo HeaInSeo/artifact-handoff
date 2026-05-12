@@ -277,8 +277,8 @@ func TestSimulateProducerFailed(t *testing.T) {
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 	}, nodeWorker2)
 
-	if result.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %s, want MISSING", result.Status)
+	if result.Status != domain.ResolutionStatusProducerFailed {
+		t.Fatalf("status = %s, want PRODUCER_FAILED", result.Status)
 	}
 	if result.Decision != domain.ResolutionDecisionProducerFailed {
 		t.Fatalf("decision = %s, want producer_failed", result.Decision)
@@ -304,7 +304,7 @@ func TestSimulateDigestMismatch(t *testing.T) {
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
-	_, err := svc.ResolveHandoff(context.Background(), domain.Binding{
+	result := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
 		SampleRunID:        simRun,
 		ChildNodeID:        "node-B",
@@ -315,8 +315,11 @@ func TestSimulateDigestMismatch(t *testing.T) {
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		ExpectedDigest:     "sha256:wrong",
 	}, nodeWorker2)
-	if err == nil {
-		t.Fatal("expected digest mismatch error, got nil")
+	if result.Status != domain.ResolutionStatusDigestMismatch {
+		t.Fatalf("status = %s, want DIGEST_MISMATCH", result.Status)
+	}
+	if result.Retryable {
+		t.Fatal("digest mismatch must not be retryable")
 	}
 }
 
@@ -347,8 +350,8 @@ func TestSimulateSameNodeOnlyViolation(t *testing.T) {
 		ConsumePolicy:      domain.ConsumePolicySameNodeOnly,
 	}, nodeWorker2) // different node
 
-	if result.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %s, want MISSING", result.Status)
+	if result.Status != domain.ResolutionStatusPolicyBlocked {
+		t.Fatalf("status = %s, want POLICY_BLOCKED", result.Status)
 	}
 	if result.Decision != domain.ResolutionDecisionUnavailable {
 		t.Fatalf("decision = %s, want unavailable", result.Decision)
@@ -403,8 +406,8 @@ func TestSimulateGCExpiredRun(t *testing.T) {
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 	}, nodeWorker2)
 
-	if result.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %s, want MISSING", result.Status)
+	if result.Status != domain.ResolutionStatusGCExpired {
+		t.Fatalf("status = %s, want GC_EXPIRED", result.Status)
 	}
 	if result.Decision != domain.ResolutionDecisionUnavailable {
 		t.Fatalf("decision = %s, want unavailable", result.Decision)

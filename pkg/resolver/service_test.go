@@ -160,7 +160,7 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 	}
 }
 
-func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
+func TestResolveHandoffDigestMismatchReturnsStatus(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -176,7 +176,7 @@ func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 		t.Fatalf("register artifact: %v", err)
 	}
 
-	_, err = service.ResolveHandoff(context.Background(), domain.Binding{
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-digest",
 		ProducerNodeID:     "parent-a",
@@ -186,8 +186,14 @@ func TestResolveHandoffDigestMismatchReturnsError(t *testing.T) {
 		Required:           true,
 		ExpectedDigest:     "sha256:expected",
 	}, "node-b")
-	if err == nil {
-		t.Fatal("resolve handoff error = nil, want digest mismatch error")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusDigestMismatch {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusDigestMismatch)
+	}
+	if resolved.Retryable {
+		t.Fatal("digest mismatch should not be retryable")
 	}
 }
 
@@ -353,8 +359,8 @@ func TestResolvePlanningMode_SameNodeOnly_MissingNodeName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if resolved.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %q, want MISSING (no locality to satisfy SameNodeOnly)", resolved.Status)
+	if resolved.Status != domain.ResolutionStatusUnavailable {
+		t.Fatalf("status = %q, want UNAVAILABLE (no locality to satisfy SameNodeOnly)", resolved.Status)
 	}
 }
 
@@ -383,8 +389,8 @@ func TestResolvePlanningMode_RemoteOK_MissingURI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if resolved.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %q, want MISSING (no URI for remote fetch)", resolved.Status)
+	if resolved.Status != domain.ResolutionStatusUnavailable {
+		t.Fatalf("status = %q, want UNAVAILABLE (no URI for remote fetch)", resolved.Status)
 	}
 }
 
@@ -643,15 +649,15 @@ func TestResolveHandoffPostScheduling_SameNodeOnly_Violation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if resolved.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %q, want MISSING (post-scheduling violation)", resolved.Status)
+	if resolved.Status != domain.ResolutionStatusPolicyBlocked {
+		t.Fatalf("status = %q, want POLICY_BLOCKED (post-scheduling SameNodeOnly violation)", resolved.Status)
 	}
 	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeRequiredNode {
 		t.Fatalf("placementIntent.mode = %q, want required_node", resolved.PlacementIntent.Mode)
 	}
 }
 
-func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
+func TestResolveHandoffDigestMismatch_ArtifactHasNoDigest(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
@@ -666,7 +672,7 @@ func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
 		t.Fatalf("register artifact: %v", err)
 	}
 
-	_, err := service.ResolveHandoff(context.Background(), domain.Binding{
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
 		BindingName:        "dataset-input",
 		SampleRunID:        "sample-nodigest",
 		ProducerNodeID:     "parent-a",
@@ -675,8 +681,14 @@ func TestResolveHandoffRejectsExpectedDigestWhenArtifactHasNone(t *testing.T) {
 		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
 		ExpectedDigest:     "sha256:abc123",
 	}, "node-b")
-	if err == nil {
-		t.Fatal("resolve handoff error = nil, want digest unknown error")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusDigestMismatch {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusDigestMismatch)
+	}
+	if resolved.Retryable {
+		t.Fatal("digest mismatch should not be retryable")
 	}
 }
 
@@ -753,8 +765,8 @@ func TestResolveHandoffReturnsProducerFailedWhenProducerFailedAndArtifactMissing
 	if err != nil {
 		t.Fatalf("resolve handoff: %v", err)
 	}
-	if resolved.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusMissing)
+	if resolved.Status != domain.ResolutionStatusProducerFailed {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusProducerFailed)
 	}
 	if resolved.Decision != domain.ResolutionDecisionProducerFailed {
 		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionProducerFailed)
@@ -799,8 +811,8 @@ func TestResolveHandoffReturnsMissingWhenSampleAlreadyGCEligible(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve handoff: %v", err)
 	}
-	if resolved.Status != domain.ResolutionStatusMissing {
-		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusMissing)
+	if resolved.Status != domain.ResolutionStatusGCExpired {
+		t.Fatalf("status = %s, want %s", resolved.Status, domain.ResolutionStatusGCExpired)
 	}
 	if resolved.Decision != domain.ResolutionDecisionUnavailable {
 		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionUnavailable)

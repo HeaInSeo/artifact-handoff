@@ -151,7 +151,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	}
 	if lifecycleFound && lifecycle.GCEligible {
 		return domain.ResolvedHandoff{
-			Status:              domain.ResolutionStatusMissing,
+			Status:              domain.ResolutionStatusGCExpired,
 			Decision:            domain.ResolutionDecisionUnavailable,
 			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 			MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -180,7 +180,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		}
 		if terminal.TerminalState == "Failed" || terminal.TerminalState == "Canceled" {
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusMissing,
+				Status:              domain.ResolutionStatusProducerFailed,
 				Decision:            domain.ResolutionDecisionProducerFailed,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -219,10 +219,24 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	}
 	if binding.ExpectedDigest != "" {
 		if artifact.Digest == "" {
-			return domain.ResolvedHandoff{}, fmt.Errorf("artifact digest unknown for binding %s: expected digest was specified but artifact has none", binding.BindingName)
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusDigestMismatch,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "artifact has no digest; expected digest was specified",
+				Retryable:           false,
+			}, nil
 		}
 		if binding.ExpectedDigest != artifact.Digest {
-			return domain.ResolvedHandoff{}, fmt.Errorf("artifact digest mismatch for binding %s", binding.BindingName)
+			return domain.ResolvedHandoff{
+				Status:              domain.ResolutionStatusDigestMismatch,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "artifact digest mismatch",
+				Retryable:           false,
+			}, nil
 		}
 	}
 	// Build the materialization plan helpers up front — both branches may need them.
@@ -252,7 +266,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		if artifact.NodeName != "" && targetNodeName == artifact.NodeName {
 			if artifact.URI == "" {
 				return domain.ResolvedHandoff{
-					Status:              domain.ResolutionStatusMissing,
+					Status:              domain.ResolutionStatusUnavailable,
 					Decision:            domain.ResolutionDecisionUnavailable,
 					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -276,7 +290,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		switch binding.ConsumePolicy {
 		case domain.ConsumePolicySameNodeOnly:
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusMissing,
+				Status:              domain.ResolutionStatusPolicyBlocked,
 				Decision:            domain.ResolutionDecisionUnavailable,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeRequiredNode, NodeName: artifact.NodeName},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -286,7 +300,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		default:
 			if artifact.URI == "" {
 				return domain.ResolvedHandoff{
-					Status:              domain.ResolutionStatusMissing,
+					Status:              domain.ResolutionStatusUnavailable,
 					Decision:            domain.ResolutionDecisionUnavailable,
 					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -312,7 +326,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	case domain.ConsumePolicySameNodeOnly:
 		if artifact.NodeName == "" {
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusMissing,
+				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -322,7 +336,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		}
 		if artifact.URI == "" {
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusMissing,
+				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -344,7 +358,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	case domain.ConsumePolicySameNodeThenRemote:
 		if artifact.URI == "" {
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusMissing,
+				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
@@ -377,7 +391,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	default: // ConsumePolicyRemoteOK
 		if artifact.URI == "" {
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusMissing,
+				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},

@@ -39,9 +39,36 @@ const (
 type ResolutionStatus string
 
 const (
+	// Terminal success states.
 	ResolutionStatusResolved ResolutionStatus = "RESOLVED"
-	ResolutionStatusPending  ResolutionStatus = "PENDING"
-	ResolutionStatusMissing  ResolutionStatus = "MISSING"
+
+	// Transient — caller should wait and retry.
+	ResolutionStatusPending ResolutionStatus = "PENDING"
+
+	// Artifact was expected but was not registered even though the producer
+	// completed successfully (e.g. optional output skipped).
+	ResolutionStatusMissing ResolutionStatus = "MISSING"
+
+	// Producer node reached a Failed or Canceled terminal state; child should
+	// be blocked, not retried.
+	ResolutionStatusProducerFailed ResolutionStatus = "PRODUCER_FAILED"
+
+	// ConsumePolicy forbids the requested placement (e.g. SameNodeOnly but
+	// consumer landed on a different node). Fallback must not be attempted.
+	ResolutionStatusPolicyBlocked ResolutionStatus = "POLICY_BLOCKED"
+
+	// Binding specified an ExpectedDigest that does not match the registered
+	// artifact digest, or the artifact has no digest at all. Indicates a
+	// reproducibility / integrity violation.
+	ResolutionStatusDigestMismatch ResolutionStatus = "DIGEST_MISMATCH"
+
+	// The sample run has been marked GC-eligible; artifact data may no longer
+	// be available. Caller should trigger a re-run or propagate failure.
+	ResolutionStatusGCExpired ResolutionStatus = "GC_EXPIRED"
+
+	// Artifact exists but cannot be materialised: URI is absent or the remote
+	// source is unreachable.
+	ResolutionStatusUnavailable ResolutionStatus = "UNAVAILABLE"
 )
 
 type ResolutionDecision string
