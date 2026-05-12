@@ -234,6 +234,55 @@ func TestRegisterArtifactPopulatesCanonicalID(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactIdempotentForSameDigest(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	artifact := domain.Artifact{
+		SampleRunID:       "run-idem",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:abc",
+		URI:               "jumi://runs/run-idem/nodes/node-a/outputs/output",
+	}
+	if _, err := service.RegisterArtifact(context.Background(), artifact); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+	// Re-registering with the same digest must succeed (idempotent).
+	if _, err := service.RegisterArtifact(context.Background(), artifact); err != nil {
+		t.Fatalf("second register (same digest) must be idempotent: %v", err)
+	}
+}
+
+func TestRegisterArtifactRejectsDigestConflictForSameArtifactKey(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-conflict",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:original",
+		URI:               "jumi://runs/run-conflict/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("first register: %v", err)
+	}
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-conflict",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:tampered", // different digest, same key
+		URI:               "jumi://runs/run-conflict/nodes/node-a/outputs/output",
+	})
+	if err == nil {
+		t.Fatal("expected conflict error for re-registration with different digest, got nil")
+	}
+}
+
 func TestResolveHandoffRejectsMissingProducerAttemptID(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)

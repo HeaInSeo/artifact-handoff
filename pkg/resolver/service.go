@@ -81,6 +81,16 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	if artifact.ArtifactID == "" {
 		artifact.ArtifactID = artifact.CanonicalID()
 	}
+	// Enforce artifact immutability: same key + same digest = idempotent OK;
+	// same key + different digest = conflict error.
+	existing, exists, err := s.store.GetArtifact(ctx, artifact.SampleRunID, artifact.ProducerNodeID, artifact.ProducerAttemptID, artifact.OutputName)
+	if err != nil {
+		return "", err
+	}
+	if exists && existing.Digest != "" && artifact.Digest != "" && existing.Digest != artifact.Digest {
+		return "", fmt.Errorf("artifact %s already registered with digest %s; rejecting re-registration with digest %s",
+			artifact.Key(), existing.Digest, artifact.Digest)
+	}
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
 		return "", err
 	}
