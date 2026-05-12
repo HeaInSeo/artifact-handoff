@@ -15,8 +15,10 @@ const (
 
 func (p ConsumePolicy) Validate() error {
 	switch p {
-	case ConsumePolicySameNodeOnly, ConsumePolicySameNodeThenRemote, ConsumePolicyRemoteOK, "":
+	case ConsumePolicySameNodeOnly, ConsumePolicySameNodeThenRemote, ConsumePolicyRemoteOK:
 		return nil
+	case "":
+		return fmt.Errorf("consume policy is required")
 	default:
 		return fmt.Errorf("unknown consume policy %q", p)
 	}

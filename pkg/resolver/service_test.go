@@ -234,6 +234,50 @@ func TestRegisterArtifactPopulatesCanonicalID(t *testing.T) {
 	}
 }
 
+func TestResolveHandoffRejectsMissingProducerAttemptID(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-1",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "", // intentionally empty
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+	}, "node-b")
+	if err == nil {
+		t.Fatal("expected error for missing producerAttemptID, got nil")
+	}
+}
+
+func TestResolveHandoffRejectsEmptyConsumePolicy(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-1",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      "", // intentionally empty
+	}, "node-b")
+	if err == nil {
+		t.Fatal("expected error for empty consumePolicy, got nil")
+	}
+}
+
+func TestGetArtifactRejectsMissingAttemptID(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, _, err := service.GetArtifact(context.Background(), "run-1", "node-a", "", "output")
+	if err == nil {
+		t.Fatal("expected error for missing attemptID, got nil")
+	}
+}
+
 func TestResolveHandoffRejectsUnknownConsumePolicy(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)

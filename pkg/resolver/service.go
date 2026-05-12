@@ -101,6 +101,9 @@ func (s *Service) GetArtifactCore(ctx context.Context, sampleRunID, producerNode
 	if sampleRunID == "" || producerNodeID == "" || outputName == "" {
 		return domain.Artifact{}, false, fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
 	}
+	if attemptID == "" {
+		return domain.Artifact{}, false, fmt.Errorf("attemptID is required")
+	}
 	return s.store.GetArtifact(ctx, sampleRunID, producerNodeID, attemptID, outputName)
 }
 
@@ -115,6 +118,9 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	s.metrics.IncResolveRequests()
 	if binding.SampleRunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required")
+	}
+	if binding.ProducerAttemptID == "" {
+		return domain.ResolvedHandoff{}, fmt.Errorf("binding producerAttemptID is required")
 	}
 	if err := binding.ConsumePolicy.Validate(); err != nil {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding %s: %w", binding.BindingName, err)
