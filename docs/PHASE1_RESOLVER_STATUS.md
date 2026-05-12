@@ -104,8 +104,34 @@ AH는 "latest successful attempt 자동 선택" 하지 않는다. v0.1에서 `pr
 
 ---
 
+## ArtifactID 정책
+
+`ArtifactID`는 `sampleRunID/producerNodeID/producerAttemptID/outputName` canonical 형식과 **동일해야 한다.**
+
+`RegisterArtifactCore`는 `ArtifactID`가 비어 있으면 자동으로 canonical ID를 채운다.
+외부에서 다른 값을 제공한 경우에도 현재는 그대로 저장되므로, v0.2에서 canonical 일치 여부를 검증하거나 `ArtifactID`를 외부 노출용 display ID 필드로 명시적으로 구분할 예정이다.
+
+## targetNodeName 의미
+
+`ResolveHandoff(binding, targetNodeName)`에서 `targetNodeName`은 두 가지 모드를 구분한다.
+
+| targetNodeName | 모드 | 의미 |
+|---|---|---|
+| 비어 있음 | **pre-scheduling / planning** | Spawner가 Pod 생성 전에 호출. AH는 placement 힌트를 반환 |
+| 값 있음 | **post-scheduling check** | 이미 스케줄된 노드에서 실행 가능 여부를 검증 |
+
+planning mode 반환 정책:
+
+| ConsumePolicy | PlacementIntent | MaterializationPlan |
+|---|---|---|
+| `SameNodeOnly` | `required_node(producer)` | `local_reuse` |
+| `SameNodeThenRemote` | `preferred_node(producer)` | `remote_fetch` |
+| `RemoteOK` | `none` | `remote_fetch` |
+
 ## 남은 작업 (v0.2+)
 
+- `ArtifactID` canonical 일치 강제 검증 또는 display ID 분리
+- `ResolutionStatus` 세분화 (`POLICY_BLOCKED`, `DIGEST_MISMATCH`, `GC_EXPIRED` 등)
 - SQLite WAL mode, connection pool 고도화
 - `ResolveLatestSuccessfulHandoff` API (latest attempt 자동 선택, 별도 엔드포인트)
 - GC 판정 고도화 (artifact 크기/TTL 기반 backlog)
