@@ -860,6 +860,190 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 	}
 }
 
+func TestHTTPResolveHandoff(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	handler := NewHTTPHandler(service)
+
+	registerReq := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
+		"sampleRunId":"sample-resolve",
+		"producerNodeId":"node-a",
+		"producerAttemptId":"attempt-1",
+		"outputName":"output",
+		"nodeName":"node-a",
+		"uri":"jumi://runs/sample-resolve/nodes/node-a/outputs/output",
+		"sizeBytes":2048
+	}`))
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerResp := httptest.NewRecorder()
+	handler.ServeHTTP(registerResp, registerReq)
+	if registerResp.Code != http.StatusOK {
+		t.Fatalf("register status = %d, want 200", registerResp.Code)
+	}
+
+	resolveReq := httptest.NewRequest(http.MethodPost, "/v1/handoffs:resolve", strings.NewReader(`{
+		"binding": {
+			"bindingName":"input",
+			"sampleRunId":"sample-resolve",
+			"producerNodeId":"node-a",
+			"producerAttemptId":"attempt-1",
+			"producerOutputName":"output",
+			"consumePolicy":"RemoteOK",
+			"required":true
+		},
+		"targetNodeName":"node-b"
+	}`))
+	resolveReq.Header.Set("Content-Type", "application/json")
+	resolveResp := httptest.NewRecorder()
+	handler.ServeHTTP(resolveResp, resolveReq)
+	if resolveResp.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d, want 200: %s", resolveResp.Code, resolveResp.Body.String())
+	}
+
+	var body struct {
+		Decision         string `json:"decision"`
+		ResolutionStatus string `json:"resolutionStatus"`
+		Retryable        bool   `json:"retryable"`
+		PlacementIntent  struct {
+			Mode     string `json:"mode"`
+			NodeName string `json:"nodeName"`
+		} `json:"placementIntent"`
+		MaterializationPlan struct {
+			Mode           string `json:"mode"`
+			URI            string `json:"uri"`
+			ExpectedDigest string `json:"expectedDigest"`
+		} `json:"materializationPlan"`
+	}
+	if err := json.Unmarshal(resolveResp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal resolve response: %v", err)
+	}
+	if body.ResolutionStatus != string(domain.ResolutionStatusResolved) {
+		t.Fatalf("resolutionStatus = %q, want %q", body.ResolutionStatus, domain.ResolutionStatusResolved)
+	}
+	if body.Decision != string(domain.ResolutionDecisionRemoteFetch) {
+		t.Fatalf("decision = %q, want %q", body.Decision, domain.ResolutionDecisionRemoteFetch)
+	}
+	if body.PlacementIntent.Mode != string(domain.PlacementIntentModeNone) {
+		t.Fatalf("placementIntent.mode = %q, want %q", body.PlacementIntent.Mode, domain.PlacementIntentModeNone)
+	}
+	if body.MaterializationPlan.Mode != string(domain.MaterializationModeRemoteFetch) {
+		t.Fatalf("materializationPlan.mode = %q, want %q", body.MaterializationPlan.Mode, domain.MaterializationModeRemoteFetch)
+	}
+	if body.MaterializationPlan.URI == "" {
+		t.Fatal("materializationPlan.uri must not be empty for remote_fetch")
+	}
+}
+
+func TestHTTPResolveHandoff_LocalReuse(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	handler := NewHTTPHandler(service)
+
+	registerReq := httptest.NewRequest(http.MethodPost, "/v1/artifacts:register", strings.NewReader(`{
+		"sampleRunId":"sample-local",
+		"producerNodeId":"node-a",
+		"producerAttemptId":"attempt-1",
+		"outputName":"output",
+		"nodeName":"node-a",
+		"uri":"jumi://runs/sample-local/nodes/node-a/outputs/output",
+		"sizeBytes":1024
+	}`))
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerResp := httptest.NewRecorder()
+	handler.ServeHTTP(registerResp, registerReq)
+	if registerResp.Code != http.StatusOK {
+		t.Fatalf("register status = %d, want 200", registerResp.Code)
+	}
+
+	resolveReq := httptest.NewRequest(http.MethodPost, "/v1/handoffs:resolve", strings.NewReader(`{
+		"binding": {
+			"bindingName":"input",
+			"sampleRunId":"sample-local",
+			"producerNodeId":"node-a",
+			"producerAttemptId":"attempt-1",
+			"producerOutputName":"output",
+			"consumePolicy":"SameNodeOnly",
+			"required":true
+		},
+		"targetNodeName":"node-a"
+	}`))
+	resolveReq.Header.Set("Content-Type", "application/json")
+	resolveResp := httptest.NewRecorder()
+	handler.ServeHTTP(resolveResp, resolveReq)
+	if resolveResp.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d, want 200: %s", resolveResp.Code, resolveResp.Body.String())
+	}
+
+	var body struct {
+		Decision        string `json:"decision"`
+		PlacementIntent struct {
+			Mode     string `json:"mode"`
+			NodeName string `json:"nodeName"`
+		} `json:"placementIntent"`
+		MaterializationPlan struct {
+			Mode string `json:"mode"`
+		} `json:"materializationPlan"`
+	}
+	if err := json.Unmarshal(resolveResp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal resolve response: %v", err)
+	}
+	if body.Decision != string(domain.ResolutionDecisionLocalReuse) {
+		t.Fatalf("decision = %q, want %q", body.Decision, domain.ResolutionDecisionLocalReuse)
+	}
+	if body.PlacementIntent.Mode != string(domain.PlacementIntentModePreferredNode) {
+		t.Fatalf("placementIntent.mode = %q, want preferred_node", body.PlacementIntent.Mode)
+	}
+	if body.PlacementIntent.NodeName != "node-a" {
+		t.Fatalf("placementIntent.nodeName = %q, want node-a", body.PlacementIntent.NodeName)
+	}
+	if body.MaterializationPlan.Mode != string(domain.MaterializationModeLocalReuse) {
+		t.Fatalf("materializationPlan.mode = %q, want local_reuse", body.MaterializationPlan.Mode)
+	}
+}
+
+func TestHTTPNotifyTerminal(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	handler := NewHTTPHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/nodes:notifyTerminal", strings.NewReader(`{
+		"sampleRunId":"sample-notify",
+		"nodeId":"node-a",
+		"attemptId":"attempt-1",
+		"terminalState":"Succeeded"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	handler.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("notifyTerminal status = %d, want 200: %s", resp.Code, resp.Body.String())
+	}
+
+	var body struct {
+		Accepted bool `json:"accepted"`
+	}
+	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !body.Accepted {
+		t.Fatal("accepted = false, want true")
+	}
+
+	rec, ok, err := store.GetNodeTerminal(context.Background(), "sample-notify", "node-a", "attempt-1")
+	if err != nil {
+		t.Fatalf("GetNodeTerminal: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected terminal record to be stored")
+	}
+	if rec.TerminalState != "Succeeded" {
+		t.Fatalf("terminalState = %q, want Succeeded", rec.TerminalState)
+	}
+	if rec.AttemptID != "attempt-1" {
+		t.Fatalf("attemptId = %q, want attempt-1", rec.AttemptID)
+	}
+}
+
 func timePtr(v time.Time) *time.Time {
 	return &v
 }
