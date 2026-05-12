@@ -1,126 +1,138 @@
 # artifact-handoff
 
-`artifact-handoff`는 `artifact-handoff-poc`의 제품 지향 후속 저장소다.
+English: [README.md](README.md) | 한국어: [README.ko.md](README.ko.md)
 
-이 저장소는 `artifact-handoff-poc`에서 검증한 아이디어를 바탕으로, locality-aware artifact handoff를 위한 product-owned resolver semantics를 갖는 실제 Go 기반 Kubernetes 프로젝트로 확장하기 위해 존재한다.
+`artifact-handoff`는 Kubernetes 배치 워크로드를 위한 locality-aware artifact handoff 결정 서비스다.
 
-참고 저장소:
+하나의 질문에 답한다: **producer artifact와 consumer binding이 주어졌을 때, consumer는 어디서 실행되어야 하고 bytes를 어떻게 가져와야 하는가?**
 
-- `artifact-handoff-poc`: 나중에 공개 저장소로 게시되면 해당 GitHub 저장소, 현재는 주요 설계 근거로 사용되는 sibling validation 저장소
+`artifact-handoff`는 결정을 반환한다. Kubernetes Job 또는 Pod를 직접 생성하지 않는다.
 
-## 이 저장소가 존재하는 이유
+---
 
-`artifact-handoff-poc`는 이미 다음의 좁고 핵심적인 질문을 검증했다.
+## 핵심 계약
 
-- artifact 위치를 기록할 수 있는가
-- 그 위치를 바탕으로 same-node reuse를 유도할 수 있는가
-- same-node reuse가 불가능할 때 cross-node peer fetch가 가능한가
-- replica-aware fallback이 실제로 동작하는가
+```
+RegisterArtifact(artifact)  → AvailabilityState
+ResolveHandoff(binding, targetNodeName) → PlacementIntent + MaterializationPlan
+NotifyNodeTerminal(sampleRunID, nodeID, attemptID, state)
+FinalizeSampleRun(sampleRunID)
+EvaluateGC(sampleRunID)
+GetSampleRunLifecycle(sampleRunID)
+```
 
-하지만 PoC는 의도적으로 작다.
+**`ResolveHandoff`는 두 개의 결정 객체를 반환한다:**
 
-- Python agent와 catalog
-- script-assisted placement
-- 좁은 랩 검증
-- 의도적으로 제한된 durability, retry, policy, control-plane shape
+| 필드 | 값 | Spawner 행동 |
+|---|---|---|
+| `PlacementIntent.mode` | `none \| preferred_node \| required_node` | PodSpec의 nodeAffinity |
+| `MaterializationPlan.mode` | `none \| local_reuse \| remote_fetch` | volume mount 또는 init-container |
 
-이 저장소는 그 검증된 사실들 위에 실제 제품 경로를 세우기 위해 존재한다.
+**Spawner가 이 결정들을 PodSpec으로 번역한다. `artifact-handoff`는 Kubernetes 리소스를 직접 다루지 않는다.**
 
-## 제품 방향
+---
 
-현재 의도하는 방향은 다음과 같다.
+## Resolution Status
 
-- Kubernetes batch integration을 위한 Go 기반 resolver service
-- product-owned artifact semantics
-- producer locality와 remote-capable fallback을 함께 읽는 placement resolution
-- 교체 가능한 transport/cache backend
-- Dragonfly는 제품 의미의 소유자가 아니라 backend 후보
+`ResolveHandoff`는 다음 중 하나의 status를 반환한다. Spawner는 이 값으로 분기한다:
 
-## 비목표
+| Status | Spawner 행동 |
+|---|---|
+| `RESOLVED` | 진행 — `PlacementIntent` + `MaterializationPlan` 준비 완료 |
+| `PENDING` | producer 아직 terminal 아님 — 대기 후 requeue |
+| `MISSING` | producer는 성공했지만 artifact가 등록되지 않음 |
+| `PRODUCER_FAILED` | producer 실패 또는 취소 — child 실행 차단 |
+| `POLICY_BLOCKED` | `SameNodeOnly` 위반 — fallback 시도 금지 |
+| `DIGEST_MISMATCH` | 무결성/재현성 오류 — 즉시 실패 처리 |
+| `GC_EXPIRED` | sample run이 GC 대상 — 재실행 또는 실패 전파 |
+| `UNAVAILABLE` | artifact는 있지만 URI가 없거나 접근 불가 |
 
-현재 단계에서 이 저장소는 다음을 목표로 하지 않는다.
+---
 
-- 범용 P2P distribution platform
-- 범용 storage product
-- Dragonfly를 제품 코어로 직접 포크
-- PoC 스크립트나 Python 구현을 그대로 유지하는 것
+## 빠른 시작
 
-## 초기 범위
+```bash
+# in-memory store (기본값)
+go run ./cmd/artifact-handoff-resolver
 
-첫 구현 단계는 다음을 먼저 세워야 한다.
+# SQLite 영속성
+AH_STORE_DSN=sqlite:/data/ah.db go run ./cmd/artifact-handoff-resolver
 
-1. 제품 용어와 API 경계
-2. resolver-service architecture
-3. backend adapter 경계
-4. 최소 Go 프로젝트 레이아웃
-5. PoC 검증 결과에서 제품 구현으로 넘어가는 migration path
+# Docker / Podman
+podman build -t artifact-handoff:latest .
+podman run -p 8080:8080 -p 9090:9090 artifact-handoff:latest
+```
 
-## 설계 문서
+엔드포인트:
+- HTTP: `:8080`
+- gRPC: `:9090`
+- 메트릭 (Prometheus): `:8080/metrics`
+- 헬스체크: `:8080/healthz`
 
-상위 진입 문서:
+---
 
-- 영문: [docs/PRODUCT_IMPLEMENTATION_DESIGN.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.md)
-- 한글: [docs/PRODUCT_IMPLEMENTATION_DESIGN.ko.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.ko.md)
+## Artifact 식별자
 
-보조 설계 문서:
+```
+sampleRunID / producerNodeID / producerAttemptID / outputName
+```
 
-- Architecture
-  - 영문: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-  - 한글: [docs/ARCHITECTURE.ko.md](docs/ARCHITECTURE.ko.md)
-- Domain Model
-  - 영문: [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md)
-  - 한글: [docs/DOMAIN_MODEL.ko.md](docs/DOMAIN_MODEL.ko.md)
-- Placement And Fallback Policy
-  - 영문: [docs/PLACEMENT_AND_FALLBACK_POLICY.md](docs/PLACEMENT_AND_FALLBACK_POLICY.md)
-  - 한글: [docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md](docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md)
-- Dragonfly Adapter Spec
-  - 영문: [docs/DRAGONFLY_ADAPTER_SPEC.md](docs/DRAGONFLY_ADAPTER_SPEC.md)
-  - 한글: [docs/DRAGONFLY_ADAPTER_SPEC.ko.md](docs/DRAGONFLY_ADAPTER_SPEC.ko.md)
+예시: `run-001/node-A/attempt-1/result.json`
 
-Deprecated 문서군:
+`attemptID` 소유권: **JUMI/Executor 생성 → Spawner 전파 → AH 소비**.
+AH는 attemptID를 생성하거나 자동 선택하지 않는다.
 
-- resolver service 기준선과 충돌하는 오래된 문서는 [`docs/deprecated/`](docs/deprecated/) 아래로 이동했다
+---
 
-## `artifact-handoff-poc`와의 관계
+## Consume Policy
 
-이 저장소는 `artifact-handoff-poc`의 결과를 명시적으로 참고한다.
+| 정책 | 스케줄링 전 (planning) | 스케줄링 후 (post-scheduling) |
+|---|---|---|
+| `SameNodeOnly` | `required_node` + `local_reuse` | 다른 노드에 배치되면 `POLICY_BLOCKED` |
+| `SameNodeThenRemote` | `preferred_node` + `remote_fetch` | fallback 메트릭 포함 `remote_fetch` |
+| `RemoteOK` | `none` + `remote_fetch` | `remote_fetch` |
 
-검증된 입력으로 계승하는 것:
+---
 
-- same-node reuse semantics
-- cross-node peer fetch semantics
-- node-local forensic failure recording
-- producer-first current implementation truth
-- replica fallback evidence
-- dynamic placement boundary findings
-- Dragonfly-as-backend boundary judgment
+## Store 백엔드
 
-이 저장소에서 다시 설계하는 것:
+| `AH_STORE_DSN` | 백엔드 |
+|---|---|
+| `memory` (기본값) | In-memory, 재시작 시 소멸 |
+| `sqlite:<path>` | WAL 모드 SQLite — 재시작 후에도 유지 |
 
-- product-owned API와 object model
-- resolver-service architecture
-- placement-resolution ownership
-- retry와 fallback 정책
-- durable metadata/store choices
-- backend abstraction과 lifecycle
+---
 
-## 저장소 상태
+## 개발
 
-AH v0.1이 JUMI/Spawner 통합 준비 상태로 완료됐다.
+```bash
+make test          # 단위 + 통합 테스트
+make test-regression
+make coverage      # HTML 커버리지 리포트 → reports/
+make lint          # golangci-lint (없으면 bin/golangci-lint 자동 다운로드)
+make fmt           # gofmt + goimports
+make vet
+make vuln          # govulncheck
+```
 
-**핵심 계약:** `artifact-handoff`는 Kubernetes Job 또는 Pod를 직접 생성하지 않는다.
-placement와 materialization 결정을 반환하고, Spawner가 이를 PodSpec으로 번역한다.
+요구사항: Go 1.25+, CGO 불필요 (`modernc.org/sqlite` pure-Go SQLite 사용).
 
-완료된 항목 (v0.1):
+---
 
-- Artifact identity: `sampleRunID/producerNodeID/producerAttemptID/outputName`
-- `ResolveHandoff`가 7개 해결 경로 전체에서 `PlacementIntent` + `MaterializationPlan` 반환
-- gRPC 및 HTTP transport 전 필드 연결 완료
-- SQLite 영속성 (`AH_STORE_DSN=sqlite:<path>`, 기본값: in-memory)
-- A→B→C simulation test (Kubernetes 없이 동작)
-- `attemptID` 소유권: JUMI/Executor 생성, Spawner 전파, AH 소비
+## 문서
 
-현재 진입점:
+| 문서 | 목적 |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 시스템 아키텍처, 서브시스템 경계, 안정적인 제약 |
+| [docs/PHASE1_RESOLVER_STATUS.md](docs/PHASE1_RESOLVER_STATUS.md) | v0.1 구현 상태, API 목록, 환경변수, v0.2 백로그 |
 
-- resolver binary: `cmd/artifact-handoff-resolver`
-- 상태 문서: [docs/PHASE1_RESOLVER_STATUS.md](docs/PHASE1_RESOLVER_STATUS.md)
+이전 설계 문서는 [`docs/deprecated/`](docs/deprecated/)에 보존되어 있다.
+
+---
+
+## 버전
+
+| 태그 | 내용 |
+|---|---|
+| `v0.1.0` | AH-only contract-ready baseline — 전체 resolution 경로, HTTP + gRPC, SQLite store |
+| `main` | v0.2 sprint 1 — 세분화된 `ResolutionStatus`, SQLite WAL + connection pool |

@@ -1,129 +1,138 @@
 # artifact-handoff
 
-English: [README.md](README.md)
-한국어: [README.ko.md](README.ko.md)
+English: [README.md](README.md) | 한국어: [README.ko.md](README.ko.md)
 
-`artifact-handoff` is the product-oriented successor to `artifact-handoff-poc`.
+`artifact-handoff` is a locality-aware artifact handoff decision service for Kubernetes batch workloads.
 
-This repository exists to turn the validated ideas from `artifact-handoff-poc` into a real Go-based Kubernetes project with product-owned resolver semantics for locality-aware artifact handoff.
+It answers one question: **given a producer artifact and a consumer binding, where should the consumer run, and how should it get the bytes?**
 
-Reference repository:
+`artifact-handoff` returns decisions. It never creates Kubernetes Jobs or Pods.
 
-- `artifact-handoff-poc`: <https://github.com/HeaInSeo/artifact-handoff-poc> if published later, or the local sibling validation repository used as the primary design reference
+---
 
-## Why This Repository Exists
+## Core Contract
 
-`artifact-handoff-poc` already validated the narrow core question:
+```
+RegisterArtifact(artifact)  → AvailabilityState
+ResolveHandoff(binding, targetNodeName) → PlacementIntent + MaterializationPlan
+NotifyNodeTerminal(sampleRunID, nodeID, attemptID, state)
+FinalizeSampleRun(sampleRunID)
+EvaluateGC(sampleRunID)
+GetSampleRunLifecycle(sampleRunID)
+```
 
-- can artifact location be recorded
-- can same-node reuse be driven from that location
-- can cross-node peer fetch work when same-node reuse is unavailable
-- can replica-aware fallback be made real
+**`ResolveHandoff` returns two decision objects:**
 
-But the PoC is intentionally small:
+| Field | Values | Spawner action |
+|---|---|---|
+| `PlacementIntent.mode` | `none \| preferred_node \| required_node` | nodeAffinity in PodSpec |
+| `MaterializationPlan.mode` | `none \| local_reuse \| remote_fetch` | volume mount or init-container |
 
-- Python agent and catalog
-- script-assisted placement
-- narrow lab validation
-- intentionally limited durability, retry, policy, and control-plane shape
+**Spawner translates these decisions into PodSpec. `artifact-handoff` never touches Kubernetes resources.**
 
-This repository exists to build the actual product path on top of those validated facts.
+---
 
-## Product Direction
+## Resolution Status
 
-The current intended direction is:
+`ResolveHandoff` returns one of these statuses. Spawner branches on this:
 
-- Go-based resolver service for Kubernetes batch integrations
-- product-owned artifact semantics
-- placement resolution that is aware of producer locality and remote-capable fallback
-- replaceable transport/cache backends
-- Dragonfly as a backend candidate, not as the owner of product semantics
+| Status | Spawner action |
+|---|---|
+| `RESOLVED` | proceed — `PlacementIntent` + `MaterializationPlan` are ready |
+| `PENDING` | producer not yet terminal — wait and requeue |
+| `MISSING` | producer succeeded but artifact not registered |
+| `PRODUCER_FAILED` | producer failed or canceled — block child execution |
+| `POLICY_BLOCKED` | `SameNodeOnly` violated — do not attempt fallback |
+| `DIGEST_MISMATCH` | integrity/reproducibility error — fail immediately |
+| `GC_EXPIRED` | sample run is GC-eligible — re-run or propagate failure |
+| `UNAVAILABLE` | artifact exists but URI is absent or unroutable |
 
-## Non-Goals
+---
 
-At the current stage, this repository is not trying to:
+## Quick Start
 
-- become a generic P2P distribution platform
-- become a generic storage product
-- directly fork Dragonfly into the product core
-- carry over every PoC script or Python implementation path unchanged
+```bash
+# in-memory store (default)
+go run ./cmd/artifact-handoff-resolver
 
-## Initial Scope
+# SQLite persistence
+AH_STORE_DSN=sqlite:/data/ah.db go run ./cmd/artifact-handoff-resolver
 
-The first implementation phase should establish:
+# Docker / Podman
+podman build -t artifact-handoff:latest .
+podman run -p 8080:8080 -p 9090:9090 artifact-handoff:latest
+```
 
-1. product vocabulary and API boundaries
-2. resolver-service architecture
-3. backend adapter boundaries
-4. a minimum Go project layout
-5. a migration path from PoC validation into product implementation
+Endpoints:
+- HTTP: `:8080`
+- gRPC: `:9090`
+- Metrics (Prometheus): `:8080/metrics`
+- Health: `:8080/healthz`
 
-## Design Document
+---
 
-The primary starting point is:
+## Artifact Identity
 
-- English: [docs/PRODUCT_IMPLEMENTATION_DESIGN.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.md)
-- Korean: [docs/PRODUCT_IMPLEMENTATION_DESIGN.ko.md](docs/PRODUCT_IMPLEMENTATION_DESIGN.ko.md)
+```
+sampleRunID / producerNodeID / producerAttemptID / outputName
+```
 
-Supporting design documents:
+Example: `run-001/node-A/attempt-1/result.json`
 
-- Architecture
-  - English: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-  - Korean: [docs/ARCHITECTURE.ko.md](docs/ARCHITECTURE.ko.md)
-- Domain Model
-  - English: [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md)
-  - Korean: [docs/DOMAIN_MODEL.ko.md](docs/DOMAIN_MODEL.ko.md)
-- Placement And Fallback Policy
-  - English: [docs/PLACEMENT_AND_FALLBACK_POLICY.md](docs/PLACEMENT_AND_FALLBACK_POLICY.md)
-  - Korean: [docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md](docs/PLACEMENT_AND_FALLBACK_POLICY.ko.md)
-- Dragonfly Adapter Spec
-  - English: [docs/DRAGONFLY_ADAPTER_SPEC.md](docs/DRAGONFLY_ADAPTER_SPEC.md)
-  - Korean: [docs/DRAGONFLY_ADAPTER_SPEC.ko.md](docs/DRAGONFLY_ADAPTER_SPEC.ko.md)
+`attemptID` ownership: **JUMI/Executor generates → Spawner propagates → AH consumes**.
+AH never generates or auto-selects an attemptID.
 
-Deprecated document set:
+---
 
-- older pre-resolver or controller-biased documents were moved under [`docs/deprecated/`](docs/deprecated/)
+## Consume Policy
 
-## Relationship To `artifact-handoff-poc`
+| Policy | Planning mode | Post-scheduling |
+|---|---|---|
+| `SameNodeOnly` | `required_node` + `local_reuse` | `POLICY_BLOCKED` if consumer on different node |
+| `SameNodeThenRemote` | `preferred_node` + `remote_fetch` | `remote_fetch` with fallback metric |
+| `RemoteOK` | `none` + `remote_fetch` | `remote_fetch` |
 
-This repository explicitly builds on findings from `artifact-handoff-poc`.
+---
 
-What is inherited as validated input:
+## Store Backend
 
-- same-node reuse semantics
-- cross-node peer fetch semantics
-- node-local forensic failure recording
-- producer-first current implementation truth
-- replica fallback evidence
-- dynamic placement boundary findings
-- Dragonfly-as-backend boundary judgment
+| `AH_STORE_DSN` | Backend |
+|---|---|
+| `memory` (default) | In-memory, lost on restart |
+| `sqlite:<path>` | SQLite with WAL mode — survives restarts |
 
-What is intentionally re-designed here:
+---
 
-- product-owned API and object model
-- resolver-service architecture
-- placement-resolution ownership
-- retry and fallback policy
-- durable metadata/store choices
-- backend abstraction and lifecycle
+## Development
 
-## Repository Status
+```bash
+make test          # unit + integration tests
+make test-regression
+make coverage      # HTML coverage report → reports/
+make lint          # golangci-lint (auto-downloads bin/golangci-lint if absent)
+make fmt           # gofmt + goimports
+make vet
+make vuln          # govulncheck
+```
 
-AH v0.1 is contract-ready for JUMI/Spawner integration.
+Requirements: Go 1.25+, no CGO needed (pure-Go SQLite via `modernc.org/sqlite`).
 
-**Core contract:** `artifact-handoff` does not create Kubernetes Jobs or Pods.
-It returns placement and materialization decisions. Spawner translates them into PodSpec.
+---
 
-What is complete (v0.1):
+## Documentation
 
-- Artifact identity: `sampleRunID/producerNodeID/producerAttemptID/outputName`
-- `ResolveHandoff` returns `PlacementIntent` + `MaterializationPlan` for all 7 resolution paths
-- gRPC and HTTP transports wired for all fields
-- SQLite persistence via `AH_STORE_DSN=sqlite:<path>` (default: in-memory)
-- A→B→C simulation tests (no Kubernetes required)
-- `attemptID` ownership: JUMI/Executor generates, Spawner propagates, AH consumes
+| Document | Purpose |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, subsystem boundaries, stable constraints |
+| [docs/PHASE1_RESOLVER_STATUS.md](docs/PHASE1_RESOLVER_STATUS.md) | v0.1 implementation state, API surface, env vars, v0.2 backlog |
 
-Current entrypoints:
+Older planning documents are in [`docs/deprecated/`](docs/deprecated/).
 
-- resolver binary: `cmd/artifact-handoff-resolver`
-- status document: [docs/PHASE1_RESOLVER_STATUS.md](docs/PHASE1_RESOLVER_STATUS.md)
+---
+
+## Version
+
+| Tag | Contents |
+|---|---|
+| `v0.1.0` | AH-only contract-ready baseline — all resolution paths, HTTP + gRPC, SQLite store |
+| `main` | v0.2 sprint 1 — fine-grained `ResolutionStatus`, SQLite WAL + connection pool |
