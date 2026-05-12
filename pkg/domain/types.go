@@ -91,12 +91,42 @@ func (b Binding) Key() string {
 	return artifactKey(b.SampleRunID, b.ProducerNodeID, b.ProducerAttemptID, b.ProducerOutputName)
 }
 
+type PlacementIntentMode string
+
+const (
+	PlacementIntentModeNone          PlacementIntentMode = "none"
+	PlacementIntentModePreferredNode PlacementIntentMode = "preferred_node"
+	PlacementIntentModeRequiredNode  PlacementIntentMode = "required_node"
+)
+
+type MaterializationMode string
+
+const (
+	MaterializationModeNone        MaterializationMode = "none"
+	MaterializationModeLocalReuse  MaterializationMode = "local_reuse"
+	MaterializationModeRemoteFetch MaterializationMode = "remote_fetch"
+)
+
+type PlacementIntent struct {
+	Mode     PlacementIntentMode `json:"mode"`
+	NodeName string              `json:"nodeName,omitempty"`
+}
+
+type MaterializationPlan struct {
+	Mode           MaterializationMode `json:"mode"`
+	URI            string              `json:"uri,omitempty"`
+	ExpectedDigest string              `json:"expectedDigest,omitempty"`
+}
+
 type ResolvedHandoff struct {
-	Status                  ResolutionStatus   `json:"resolutionStatus"`
-	Decision                ResolutionDecision `json:"decision"`
-	SourceNodeName          string             `json:"sourceNodeName,omitempty"`
-	ArtifactURI             string             `json:"artifactURI,omitempty"`
-	RequiresMaterialization bool               `json:"requiresMaterialization"`
+	Status   ResolutionStatus   `json:"resolutionStatus"`
+	Decision ResolutionDecision `json:"decision"`
+
+	PlacementIntent     PlacementIntent     `json:"placementIntent"`
+	MaterializationPlan MaterializationPlan `json:"materializationPlan"`
+
+	Reason    string `json:"reason,omitempty"`
+	Retryable bool   `json:"retryable"`
 }
 
 type NodeTerminalRecord struct {

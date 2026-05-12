@@ -63,11 +63,19 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 		return nil, err
 	}
 	return &ahv1.ResolveHandoffResponse{
-		ResolutionStatus:        string(resolved.Status),
-		Decision:                string(resolved.Decision),
-		SourceNodeName:          resolved.SourceNodeName,
-		ArtifactUri:             resolved.ArtifactURI,
-		RequiresMaterialization: resolved.RequiresMaterialization,
+		ResolutionStatus: string(resolved.Status),
+		Decision:         string(resolved.Decision),
+		PlacementIntent: &ahv1.PlacementIntent{
+			Mode:     string(resolved.PlacementIntent.Mode),
+			NodeName: resolved.PlacementIntent.NodeName,
+		},
+		MaterializationPlan: &ahv1.MaterializationPlan{
+			Mode:           string(resolved.MaterializationPlan.Mode),
+			Uri:            resolved.MaterializationPlan.URI,
+			ExpectedDigest: resolved.MaterializationPlan.ExpectedDigest,
+		},
+		Reason:    resolved.Reason,
+		Retryable: resolved.Retryable,
 	}, nil
 }
 

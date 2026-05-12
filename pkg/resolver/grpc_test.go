@@ -74,6 +74,9 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	if resolveResp.GetDecision() != string(domain.ResolutionDecisionRemoteFetch) {
 		t.Fatalf("decision = %q, want %q", resolveResp.GetDecision(), domain.ResolutionDecisionRemoteFetch)
 	}
+	if resolveResp.GetMaterializationPlan().GetMode() != string(domain.MaterializationModeRemoteFetch) {
+		t.Fatalf("materialization mode = %q, want remote_fetch", resolveResp.GetMaterializationPlan().GetMode())
+	}
 
 	if _, err := client.NotifyNodeTerminal(ctx, &ahv1.NotifyNodeTerminalRequest{
 		SampleRunId:   "sample-1",

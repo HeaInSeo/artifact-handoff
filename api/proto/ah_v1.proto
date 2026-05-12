@@ -44,12 +44,24 @@ message ResolveHandoffRequest {
   string target_node_name = 2;
 }
 
+message PlacementIntent {
+  string mode = 1;
+  string node_name = 2;
+}
+
+message MaterializationPlan {
+  string mode = 1;
+  string uri = 2;
+  string expected_digest = 3;
+}
+
 message ResolveHandoffResponse {
   string resolution_status = 1;
   string decision = 2;
-  string source_node_name = 3;
-  string artifact_uri = 4;
-  bool requires_materialization = 5;
+  PlacementIntent placement_intent = 3;
+  MaterializationPlan materialization_plan = 4;
+  string reason = 5;
+  bool retryable = 6;
 }
 
 message NotifyNodeTerminalRequest {

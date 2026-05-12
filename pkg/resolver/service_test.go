@@ -108,8 +108,14 @@ func TestResolveHandoffLocalReuse(t *testing.T) {
 	if resolved.Decision != domain.ResolutionDecisionLocalReuse {
 		t.Fatalf("expected local reuse, got %s", resolved.Decision)
 	}
-	if resolved.RequiresMaterialization {
-		t.Fatalf("expected no materialization")
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModePreferredNode {
+		t.Fatalf("placement intent mode = %s, want preferred_node", resolved.PlacementIntent.Mode)
+	}
+	if resolved.PlacementIntent.NodeName != "node-a" {
+		t.Fatalf("placement intent node = %s, want node-a", resolved.PlacementIntent.NodeName)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeLocalReuse {
+		t.Fatalf("materialization mode = %s, want local_reuse", resolved.MaterializationPlan.Mode)
 	}
 }
 
@@ -143,8 +149,14 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 	if resolved.Decision != domain.ResolutionDecisionRemoteFetch {
 		t.Fatalf("expected remote fetch, got %s", resolved.Decision)
 	}
-	if !resolved.RequiresMaterialization {
+	if resolved.MaterializationPlan.Mode == domain.MaterializationModeNone {
 		t.Fatalf("expected materialization")
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materialization mode = %s, want remote_fetch", resolved.MaterializationPlan.Mode)
+	}
+	if resolved.MaterializationPlan.URI == "" {
+		t.Fatal("expected materialization URI")
 	}
 }
 
@@ -299,6 +311,9 @@ func TestResolveHandoffReturnsPendingWhenProducerNotTerminalAndArtifactMissing(t
 	}
 	if resolved.Decision != domain.ResolutionDecisionUnavailable {
 		t.Fatalf("decision = %s, want %s", resolved.Decision, domain.ResolutionDecisionUnavailable)
+	}
+	if !resolved.Retryable {
+		t.Fatal("expected pending to be retryable")
 	}
 }
 

@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.1
-// source: api/proto/ah_v1.proto
+// source: ah_v1.proto
 
 package ahv1
 
@@ -38,7 +38,7 @@ type ArtifactRef struct {
 
 func (x *ArtifactRef) Reset() {
 	*x = ArtifactRef{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[0]
+	mi := &file_ah_v1_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -50,7 +50,7 @@ func (x *ArtifactRef) String() string {
 func (*ArtifactRef) ProtoMessage() {}
 
 func (x *ArtifactRef) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[0]
+	mi := &file_ah_v1_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -63,7 +63,7 @@ func (x *ArtifactRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArtifactRef.ProtoReflect.Descriptor instead.
 func (*ArtifactRef) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{0}
+	return file_ah_v1_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *ArtifactRef) GetSampleRunId() string {
@@ -138,7 +138,7 @@ type RegisterArtifactRequest struct {
 
 func (x *RegisterArtifactRequest) Reset() {
 	*x = RegisterArtifactRequest{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[1]
+	mi := &file_ah_v1_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -150,7 +150,7 @@ func (x *RegisterArtifactRequest) String() string {
 func (*RegisterArtifactRequest) ProtoMessage() {}
 
 func (x *RegisterArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[1]
+	mi := &file_ah_v1_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -163,7 +163,7 @@ func (x *RegisterArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterArtifactRequest.ProtoReflect.Descriptor instead.
 func (*RegisterArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{1}
+	return file_ah_v1_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *RegisterArtifactRequest) GetArtifact() *ArtifactRef {
@@ -182,7 +182,7 @@ type RegisterArtifactResponse struct {
 
 func (x *RegisterArtifactResponse) Reset() {
 	*x = RegisterArtifactResponse{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[2]
+	mi := &file_ah_v1_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -194,7 +194,7 @@ func (x *RegisterArtifactResponse) String() string {
 func (*RegisterArtifactResponse) ProtoMessage() {}
 
 func (x *RegisterArtifactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[2]
+	mi := &file_ah_v1_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,7 +207,7 @@ func (x *RegisterArtifactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterArtifactResponse.ProtoReflect.Descriptor instead.
 func (*RegisterArtifactResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{2}
+	return file_ah_v1_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RegisterArtifactResponse) GetAvailabilityState() string {
@@ -237,7 +237,7 @@ type ArtifactBinding struct {
 
 func (x *ArtifactBinding) Reset() {
 	*x = ArtifactBinding{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[3]
+	mi := &file_ah_v1_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -249,7 +249,7 @@ func (x *ArtifactBinding) String() string {
 func (*ArtifactBinding) ProtoMessage() {}
 
 func (x *ArtifactBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[3]
+	mi := &file_ah_v1_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -262,7 +262,7 @@ func (x *ArtifactBinding) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArtifactBinding.ProtoReflect.Descriptor instead.
 func (*ArtifactBinding) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{3}
+	return file_ah_v1_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ArtifactBinding) GetBindingName() string {
@@ -359,7 +359,7 @@ type ResolveHandoffRequest struct {
 
 func (x *ResolveHandoffRequest) Reset() {
 	*x = ResolveHandoffRequest{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[4]
+	mi := &file_ah_v1_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -371,7 +371,7 @@ func (x *ResolveHandoffRequest) String() string {
 func (*ResolveHandoffRequest) ProtoMessage() {}
 
 func (x *ResolveHandoffRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[4]
+	mi := &file_ah_v1_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -384,7 +384,7 @@ func (x *ResolveHandoffRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveHandoffRequest.ProtoReflect.Descriptor instead.
 func (*ResolveHandoffRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{4}
+	return file_ah_v1_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ResolveHandoffRequest) GetBinding() *ArtifactBinding {
@@ -401,20 +401,133 @@ func (x *ResolveHandoffRequest) GetTargetNodeName() string {
 	return ""
 }
 
+type PlacementIntent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mode          string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	NodeName      string                 `protobuf:"bytes,2,opt,name=node_name,json=nodeName,proto3" json:"node_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlacementIntent) Reset() {
+	*x = PlacementIntent{}
+	mi := &file_ah_v1_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlacementIntent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlacementIntent) ProtoMessage() {}
+
+func (x *PlacementIntent) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlacementIntent.ProtoReflect.Descriptor instead.
+func (*PlacementIntent) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *PlacementIntent) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *PlacementIntent) GetNodeName() string {
+	if x != nil {
+		return x.NodeName
+	}
+	return ""
+}
+
+type MaterializationPlan struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Mode           string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	Uri            string                 `protobuf:"bytes,2,opt,name=uri,proto3" json:"uri,omitempty"`
+	ExpectedDigest string                 `protobuf:"bytes,3,opt,name=expected_digest,json=expectedDigest,proto3" json:"expected_digest,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *MaterializationPlan) Reset() {
+	*x = MaterializationPlan{}
+	mi := &file_ah_v1_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MaterializationPlan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MaterializationPlan) ProtoMessage() {}
+
+func (x *MaterializationPlan) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MaterializationPlan.ProtoReflect.Descriptor instead.
+func (*MaterializationPlan) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *MaterializationPlan) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *MaterializationPlan) GetUri() string {
+	if x != nil {
+		return x.Uri
+	}
+	return ""
+}
+
+func (x *MaterializationPlan) GetExpectedDigest() string {
+	if x != nil {
+		return x.ExpectedDigest
+	}
+	return ""
+}
+
 type ResolveHandoffResponse struct {
-	state                   protoimpl.MessageState `protogen:"open.v1"`
-	ResolutionStatus        string                 `protobuf:"bytes,1,opt,name=resolution_status,json=resolutionStatus,proto3" json:"resolution_status,omitempty"`
-	Decision                string                 `protobuf:"bytes,2,opt,name=decision,proto3" json:"decision,omitempty"`
-	SourceNodeName          string                 `protobuf:"bytes,3,opt,name=source_node_name,json=sourceNodeName,proto3" json:"source_node_name,omitempty"`
-	ArtifactUri             string                 `protobuf:"bytes,4,opt,name=artifact_uri,json=artifactUri,proto3" json:"artifact_uri,omitempty"`
-	RequiresMaterialization bool                   `protobuf:"varint,5,opt,name=requires_materialization,json=requiresMaterialization,proto3" json:"requires_materialization,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	ResolutionStatus    string                 `protobuf:"bytes,1,opt,name=resolution_status,json=resolutionStatus,proto3" json:"resolution_status,omitempty"`
+	Decision            string                 `protobuf:"bytes,2,opt,name=decision,proto3" json:"decision,omitempty"`
+	PlacementIntent     *PlacementIntent       `protobuf:"bytes,3,opt,name=placement_intent,json=placementIntent,proto3" json:"placement_intent,omitempty"`
+	MaterializationPlan *MaterializationPlan   `protobuf:"bytes,4,opt,name=materialization_plan,json=materializationPlan,proto3" json:"materialization_plan,omitempty"`
+	Reason              string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	Retryable           bool                   `protobuf:"varint,6,opt,name=retryable,proto3" json:"retryable,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ResolveHandoffResponse) Reset() {
 	*x = ResolveHandoffResponse{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[5]
+	mi := &file_ah_v1_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -426,7 +539,7 @@ func (x *ResolveHandoffResponse) String() string {
 func (*ResolveHandoffResponse) ProtoMessage() {}
 
 func (x *ResolveHandoffResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[5]
+	mi := &file_ah_v1_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -439,7 +552,7 @@ func (x *ResolveHandoffResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveHandoffResponse.ProtoReflect.Descriptor instead.
 func (*ResolveHandoffResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{5}
+	return file_ah_v1_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResolveHandoffResponse) GetResolutionStatus() string {
@@ -456,23 +569,30 @@ func (x *ResolveHandoffResponse) GetDecision() string {
 	return ""
 }
 
-func (x *ResolveHandoffResponse) GetSourceNodeName() string {
+func (x *ResolveHandoffResponse) GetPlacementIntent() *PlacementIntent {
 	if x != nil {
-		return x.SourceNodeName
+		return x.PlacementIntent
+	}
+	return nil
+}
+
+func (x *ResolveHandoffResponse) GetMaterializationPlan() *MaterializationPlan {
+	if x != nil {
+		return x.MaterializationPlan
+	}
+	return nil
+}
+
+func (x *ResolveHandoffResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
 	}
 	return ""
 }
 
-func (x *ResolveHandoffResponse) GetArtifactUri() string {
+func (x *ResolveHandoffResponse) GetRetryable() bool {
 	if x != nil {
-		return x.ArtifactUri
-	}
-	return ""
-}
-
-func (x *ResolveHandoffResponse) GetRequiresMaterialization() bool {
-	if x != nil {
-		return x.RequiresMaterialization
+		return x.Retryable
 	}
 	return false
 }
@@ -489,7 +609,7 @@ type NotifyNodeTerminalRequest struct {
 
 func (x *NotifyNodeTerminalRequest) Reset() {
 	*x = NotifyNodeTerminalRequest{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[6]
+	mi := &file_ah_v1_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -501,7 +621,7 @@ func (x *NotifyNodeTerminalRequest) String() string {
 func (*NotifyNodeTerminalRequest) ProtoMessage() {}
 
 func (x *NotifyNodeTerminalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[6]
+	mi := &file_ah_v1_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -514,7 +634,7 @@ func (x *NotifyNodeTerminalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotifyNodeTerminalRequest.ProtoReflect.Descriptor instead.
 func (*NotifyNodeTerminalRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{6}
+	return file_ah_v1_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *NotifyNodeTerminalRequest) GetSampleRunId() string {
@@ -554,7 +674,7 @@ type NotifyNodeTerminalResponse struct {
 
 func (x *NotifyNodeTerminalResponse) Reset() {
 	*x = NotifyNodeTerminalResponse{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[7]
+	mi := &file_ah_v1_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -566,7 +686,7 @@ func (x *NotifyNodeTerminalResponse) String() string {
 func (*NotifyNodeTerminalResponse) ProtoMessage() {}
 
 func (x *NotifyNodeTerminalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[7]
+	mi := &file_ah_v1_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -579,7 +699,7 @@ func (x *NotifyNodeTerminalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotifyNodeTerminalResponse.ProtoReflect.Descriptor instead.
 func (*NotifyNodeTerminalResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{7}
+	return file_ah_v1_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *NotifyNodeTerminalResponse) GetAccepted() bool {
@@ -598,7 +718,7 @@ type FinalizeSampleRunRequest struct {
 
 func (x *FinalizeSampleRunRequest) Reset() {
 	*x = FinalizeSampleRunRequest{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[8]
+	mi := &file_ah_v1_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -610,7 +730,7 @@ func (x *FinalizeSampleRunRequest) String() string {
 func (*FinalizeSampleRunRequest) ProtoMessage() {}
 
 func (x *FinalizeSampleRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[8]
+	mi := &file_ah_v1_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -623,7 +743,7 @@ func (x *FinalizeSampleRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeSampleRunRequest.ProtoReflect.Descriptor instead.
 func (*FinalizeSampleRunRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{8}
+	return file_ah_v1_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *FinalizeSampleRunRequest) GetSampleRunId() string {
@@ -642,7 +762,7 @@ type FinalizeSampleRunResponse struct {
 
 func (x *FinalizeSampleRunResponse) Reset() {
 	*x = FinalizeSampleRunResponse{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[9]
+	mi := &file_ah_v1_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -654,7 +774,7 @@ func (x *FinalizeSampleRunResponse) String() string {
 func (*FinalizeSampleRunResponse) ProtoMessage() {}
 
 func (x *FinalizeSampleRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[9]
+	mi := &file_ah_v1_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -667,7 +787,7 @@ func (x *FinalizeSampleRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeSampleRunResponse.ProtoReflect.Descriptor instead.
 func (*FinalizeSampleRunResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{9}
+	return file_ah_v1_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *FinalizeSampleRunResponse) GetAccepted() bool {
@@ -686,7 +806,7 @@ type EvaluateGCRequest struct {
 
 func (x *EvaluateGCRequest) Reset() {
 	*x = EvaluateGCRequest{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[10]
+	mi := &file_ah_v1_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -698,7 +818,7 @@ func (x *EvaluateGCRequest) String() string {
 func (*EvaluateGCRequest) ProtoMessage() {}
 
 func (x *EvaluateGCRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[10]
+	mi := &file_ah_v1_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -711,7 +831,7 @@ func (x *EvaluateGCRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateGCRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateGCRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{10}
+	return file_ah_v1_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *EvaluateGCRequest) GetSampleRunId() string {
@@ -730,7 +850,7 @@ type EvaluateGCResponse struct {
 
 func (x *EvaluateGCResponse) Reset() {
 	*x = EvaluateGCResponse{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[11]
+	mi := &file_ah_v1_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +862,7 @@ func (x *EvaluateGCResponse) String() string {
 func (*EvaluateGCResponse) ProtoMessage() {}
 
 func (x *EvaluateGCResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[11]
+	mi := &file_ah_v1_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +875,7 @@ func (x *EvaluateGCResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateGCResponse.ProtoReflect.Descriptor instead.
 func (*EvaluateGCResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{11}
+	return file_ah_v1_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EvaluateGCResponse) GetAccepted() bool {
@@ -774,7 +894,7 @@ type GetSampleRunLifecycleRequest struct {
 
 func (x *GetSampleRunLifecycleRequest) Reset() {
 	*x = GetSampleRunLifecycleRequest{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[12]
+	mi := &file_ah_v1_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -786,7 +906,7 @@ func (x *GetSampleRunLifecycleRequest) String() string {
 func (*GetSampleRunLifecycleRequest) ProtoMessage() {}
 
 func (x *GetSampleRunLifecycleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[12]
+	mi := &file_ah_v1_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -799,7 +919,7 @@ func (x *GetSampleRunLifecycleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSampleRunLifecycleRequest.ProtoReflect.Descriptor instead.
 func (*GetSampleRunLifecycleRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{12}
+	return file_ah_v1_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetSampleRunLifecycleRequest) GetSampleRunId() string {
@@ -832,7 +952,7 @@ type GetSampleRunLifecycleResponse struct {
 
 func (x *GetSampleRunLifecycleResponse) Reset() {
 	*x = GetSampleRunLifecycleResponse{}
-	mi := &file_api_proto_ah_v1_proto_msgTypes[13]
+	mi := &file_ah_v1_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -844,7 +964,7 @@ func (x *GetSampleRunLifecycleResponse) String() string {
 func (*GetSampleRunLifecycleResponse) ProtoMessage() {}
 
 func (x *GetSampleRunLifecycleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_ah_v1_proto_msgTypes[13]
+	mi := &file_ah_v1_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -857,7 +977,7 @@ func (x *GetSampleRunLifecycleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSampleRunLifecycleResponse.ProtoReflect.Descriptor instead.
 func (*GetSampleRunLifecycleResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_ah_v1_proto_rawDescGZIP(), []int{13}
+	return file_ah_v1_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetSampleRunLifecycleResponse) GetSampleRunId() string {
@@ -965,11 +1085,11 @@ func (x *GetSampleRunLifecycleResponse) GetRetainedArtifactBytes() int64 {
 	return 0
 }
 
-var File_api_proto_ah_v1_proto protoreflect.FileDescriptor
+var File_ah_v1_proto protoreflect.FileDescriptor
 
-const file_api_proto_ah_v1_proto_rawDesc = "" +
+const file_ah_v1_proto_rawDesc = "" +
 	"\n" +
-	"\x15api/proto/ah_v1.proto\x12\x05ah.v1\"\xb3\x02\n" +
+	"\vah_v1.proto\x12\x05ah.v1\"\xb3\x02\n" +
 	"\vArtifactRef\x12\"\n" +
 	"\rsample_run_id\x18\x01 \x01(\tR\vsampleRunId\x12(\n" +
 	"\x10producer_node_id\x18\x02 \x01(\tR\x0eproducerNodeId\x12\x1f\n" +
@@ -1004,13 +1124,21 @@ const file_api_proto_ah_v1_proto_rawDesc = "" +
 	"\x10child_attempt_id\x18\f \x01(\tR\x0echildAttemptId\"s\n" +
 	"\x15ResolveHandoffRequest\x120\n" +
 	"\abinding\x18\x01 \x01(\v2\x16.ah.v1.ArtifactBindingR\abinding\x12(\n" +
-	"\x10target_node_name\x18\x02 \x01(\tR\x0etargetNodeName\"\xe9\x01\n" +
+	"\x10target_node_name\x18\x02 \x01(\tR\x0etargetNodeName\"B\n" +
+	"\x0fPlacementIntent\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x1b\n" +
+	"\tnode_name\x18\x02 \x01(\tR\bnodeName\"d\n" +
+	"\x13MaterializationPlan\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x10\n" +
+	"\x03uri\x18\x02 \x01(\tR\x03uri\x12'\n" +
+	"\x0fexpected_digest\x18\x03 \x01(\tR\x0eexpectedDigest\"\xa9\x02\n" +
 	"\x16ResolveHandoffResponse\x12+\n" +
 	"\x11resolution_status\x18\x01 \x01(\tR\x10resolutionStatus\x12\x1a\n" +
-	"\bdecision\x18\x02 \x01(\tR\bdecision\x12(\n" +
-	"\x10source_node_name\x18\x03 \x01(\tR\x0esourceNodeName\x12!\n" +
-	"\fartifact_uri\x18\x04 \x01(\tR\vartifactUri\x129\n" +
-	"\x18requires_materialization\x18\x05 \x01(\bR\x17requiresMaterialization\"\x9e\x01\n" +
+	"\bdecision\x18\x02 \x01(\tR\bdecision\x12A\n" +
+	"\x10placement_intent\x18\x03 \x01(\v2\x16.ah.v1.PlacementIntentR\x0fplacementIntent\x12M\n" +
+	"\x14materialization_plan\x18\x04 \x01(\v2\x1a.ah.v1.MaterializationPlanR\x13materializationPlan\x12\x16\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x1c\n" +
+	"\tretryable\x18\x06 \x01(\bR\tretryable\"\x9e\x01\n" +
 	"\x19NotifyNodeTerminalRequest\x12\"\n" +
 	"\rsample_run_id\x18\x01 \x01(\tR\vsampleRunId\x12\x17\n" +
 	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12%\n" +
@@ -1057,76 +1185,80 @@ const file_api_proto_ah_v1_proto_rawDesc = "" +
 	"\x15GetSampleRunLifecycle\x12#.ah.v1.GetSampleRunLifecycleRequest\x1a$.ah.v1.GetSampleRunLifecycleResponseB5Z3github.com/HeaInSeo/artifact-handoff/api/proto/ahv1b\x06proto3"
 
 var (
-	file_api_proto_ah_v1_proto_rawDescOnce sync.Once
-	file_api_proto_ah_v1_proto_rawDescData []byte
+	file_ah_v1_proto_rawDescOnce sync.Once
+	file_ah_v1_proto_rawDescData []byte
 )
 
-func file_api_proto_ah_v1_proto_rawDescGZIP() []byte {
-	file_api_proto_ah_v1_proto_rawDescOnce.Do(func() {
-		file_api_proto_ah_v1_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_proto_ah_v1_proto_rawDesc), len(file_api_proto_ah_v1_proto_rawDesc)))
+func file_ah_v1_proto_rawDescGZIP() []byte {
+	file_ah_v1_proto_rawDescOnce.Do(func() {
+		file_ah_v1_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_ah_v1_proto_rawDesc), len(file_ah_v1_proto_rawDesc)))
 	})
-	return file_api_proto_ah_v1_proto_rawDescData
+	return file_ah_v1_proto_rawDescData
 }
 
-var file_api_proto_ah_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
-var file_api_proto_ah_v1_proto_goTypes = []any{
+var file_ah_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_ah_v1_proto_goTypes = []any{
 	(*ArtifactRef)(nil),                   // 0: ah.v1.ArtifactRef
 	(*RegisterArtifactRequest)(nil),       // 1: ah.v1.RegisterArtifactRequest
 	(*RegisterArtifactResponse)(nil),      // 2: ah.v1.RegisterArtifactResponse
 	(*ArtifactBinding)(nil),               // 3: ah.v1.ArtifactBinding
 	(*ResolveHandoffRequest)(nil),         // 4: ah.v1.ResolveHandoffRequest
-	(*ResolveHandoffResponse)(nil),        // 5: ah.v1.ResolveHandoffResponse
-	(*NotifyNodeTerminalRequest)(nil),     // 6: ah.v1.NotifyNodeTerminalRequest
-	(*NotifyNodeTerminalResponse)(nil),    // 7: ah.v1.NotifyNodeTerminalResponse
-	(*FinalizeSampleRunRequest)(nil),      // 8: ah.v1.FinalizeSampleRunRequest
-	(*FinalizeSampleRunResponse)(nil),     // 9: ah.v1.FinalizeSampleRunResponse
-	(*EvaluateGCRequest)(nil),             // 10: ah.v1.EvaluateGCRequest
-	(*EvaluateGCResponse)(nil),            // 11: ah.v1.EvaluateGCResponse
-	(*GetSampleRunLifecycleRequest)(nil),  // 12: ah.v1.GetSampleRunLifecycleRequest
-	(*GetSampleRunLifecycleResponse)(nil), // 13: ah.v1.GetSampleRunLifecycleResponse
+	(*PlacementIntent)(nil),               // 5: ah.v1.PlacementIntent
+	(*MaterializationPlan)(nil),           // 6: ah.v1.MaterializationPlan
+	(*ResolveHandoffResponse)(nil),        // 7: ah.v1.ResolveHandoffResponse
+	(*NotifyNodeTerminalRequest)(nil),     // 8: ah.v1.NotifyNodeTerminalRequest
+	(*NotifyNodeTerminalResponse)(nil),    // 9: ah.v1.NotifyNodeTerminalResponse
+	(*FinalizeSampleRunRequest)(nil),      // 10: ah.v1.FinalizeSampleRunRequest
+	(*FinalizeSampleRunResponse)(nil),     // 11: ah.v1.FinalizeSampleRunResponse
+	(*EvaluateGCRequest)(nil),             // 12: ah.v1.EvaluateGCRequest
+	(*EvaluateGCResponse)(nil),            // 13: ah.v1.EvaluateGCResponse
+	(*GetSampleRunLifecycleRequest)(nil),  // 14: ah.v1.GetSampleRunLifecycleRequest
+	(*GetSampleRunLifecycleResponse)(nil), // 15: ah.v1.GetSampleRunLifecycleResponse
 }
-var file_api_proto_ah_v1_proto_depIdxs = []int32{
+var file_ah_v1_proto_depIdxs = []int32{
 	0,  // 0: ah.v1.RegisterArtifactRequest.artifact:type_name -> ah.v1.ArtifactRef
 	3,  // 1: ah.v1.ResolveHandoffRequest.binding:type_name -> ah.v1.ArtifactBinding
-	1,  // 2: ah.v1.ArtifactHandoffResolver.RegisterArtifact:input_type -> ah.v1.RegisterArtifactRequest
-	4,  // 3: ah.v1.ArtifactHandoffResolver.ResolveHandoff:input_type -> ah.v1.ResolveHandoffRequest
-	6,  // 4: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:input_type -> ah.v1.NotifyNodeTerminalRequest
-	8,  // 5: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:input_type -> ah.v1.FinalizeSampleRunRequest
-	10, // 6: ah.v1.ArtifactHandoffResolver.EvaluateGC:input_type -> ah.v1.EvaluateGCRequest
-	12, // 7: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:input_type -> ah.v1.GetSampleRunLifecycleRequest
-	2,  // 8: ah.v1.ArtifactHandoffResolver.RegisterArtifact:output_type -> ah.v1.RegisterArtifactResponse
-	5,  // 9: ah.v1.ArtifactHandoffResolver.ResolveHandoff:output_type -> ah.v1.ResolveHandoffResponse
-	7,  // 10: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:output_type -> ah.v1.NotifyNodeTerminalResponse
-	9,  // 11: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:output_type -> ah.v1.FinalizeSampleRunResponse
-	11, // 12: ah.v1.ArtifactHandoffResolver.EvaluateGC:output_type -> ah.v1.EvaluateGCResponse
-	13, // 13: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:output_type -> ah.v1.GetSampleRunLifecycleResponse
-	8,  // [8:14] is the sub-list for method output_type
-	2,  // [2:8] is the sub-list for method input_type
-	2,  // [2:2] is the sub-list for extension type_name
-	2,  // [2:2] is the sub-list for extension extendee
-	0,  // [0:2] is the sub-list for field type_name
+	5,  // 2: ah.v1.ResolveHandoffResponse.placement_intent:type_name -> ah.v1.PlacementIntent
+	6,  // 3: ah.v1.ResolveHandoffResponse.materialization_plan:type_name -> ah.v1.MaterializationPlan
+	1,  // 4: ah.v1.ArtifactHandoffResolver.RegisterArtifact:input_type -> ah.v1.RegisterArtifactRequest
+	4,  // 5: ah.v1.ArtifactHandoffResolver.ResolveHandoff:input_type -> ah.v1.ResolveHandoffRequest
+	8,  // 6: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:input_type -> ah.v1.NotifyNodeTerminalRequest
+	10, // 7: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:input_type -> ah.v1.FinalizeSampleRunRequest
+	12, // 8: ah.v1.ArtifactHandoffResolver.EvaluateGC:input_type -> ah.v1.EvaluateGCRequest
+	14, // 9: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:input_type -> ah.v1.GetSampleRunLifecycleRequest
+	2,  // 10: ah.v1.ArtifactHandoffResolver.RegisterArtifact:output_type -> ah.v1.RegisterArtifactResponse
+	7,  // 11: ah.v1.ArtifactHandoffResolver.ResolveHandoff:output_type -> ah.v1.ResolveHandoffResponse
+	9,  // 12: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:output_type -> ah.v1.NotifyNodeTerminalResponse
+	11, // 13: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:output_type -> ah.v1.FinalizeSampleRunResponse
+	13, // 14: ah.v1.ArtifactHandoffResolver.EvaluateGC:output_type -> ah.v1.EvaluateGCResponse
+	15, // 15: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:output_type -> ah.v1.GetSampleRunLifecycleResponse
+	10, // [10:16] is the sub-list for method output_type
+	4,  // [4:10] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_api_proto_ah_v1_proto_init() }
-func file_api_proto_ah_v1_proto_init() {
-	if File_api_proto_ah_v1_proto != nil {
+func init() { file_ah_v1_proto_init() }
+func file_ah_v1_proto_init() {
+	if File_ah_v1_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_proto_ah_v1_proto_rawDesc), len(file_api_proto_ah_v1_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ah_v1_proto_rawDesc), len(file_ah_v1_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_api_proto_ah_v1_proto_goTypes,
-		DependencyIndexes: file_api_proto_ah_v1_proto_depIdxs,
-		MessageInfos:      file_api_proto_ah_v1_proto_msgTypes,
+		GoTypes:           file_ah_v1_proto_goTypes,
+		DependencyIndexes: file_ah_v1_proto_depIdxs,
+		MessageInfos:      file_ah_v1_proto_msgTypes,
 	}.Build()
-	File_api_proto_ah_v1_proto = out.File
-	file_api_proto_ah_v1_proto_goTypes = nil
-	file_api_proto_ah_v1_proto_depIdxs = nil
+	File_ah_v1_proto = out.File
+	file_ah_v1_proto_goTypes = nil
+	file_ah_v1_proto_depIdxs = nil
 }

@@ -125,8 +125,12 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	}
 	if lifecycleFound && lifecycle.GCEligible {
 		return domain.ResolvedHandoff{
-			Status:   domain.ResolutionStatusMissing,
-			Decision: domain.ResolutionDecisionUnavailable,
+			Status:              domain.ResolutionStatusMissing,
+			Decision:            domain.ResolutionDecisionUnavailable,
+			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+			MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+			Reason:              "sample run is GC eligible",
+			Retryable:           false,
 		}, nil
 	}
 	artifact, ok, err := s.store.GetArtifact(ctx, binding.SampleRunID, binding.ProducerNodeID, binding.ProducerAttemptID, binding.ProducerOutputName)
@@ -140,31 +144,51 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		}
 		if !terminalFound {
 			return domain.ResolvedHandoff{
-				Status:   domain.ResolutionStatusPending,
-				Decision: domain.ResolutionDecisionUnavailable,
+				Status:              domain.ResolutionStatusPending,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "producer not yet terminal",
+				Retryable:           true,
 			}, nil
 		}
 		if terminal.TerminalState == "Failed" || terminal.TerminalState == "Canceled" {
 			return domain.ResolvedHandoff{
-				Status:   domain.ResolutionStatusMissing,
-				Decision: domain.ResolutionDecisionProducerFailed,
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionProducerFailed,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "producer failed or canceled",
+				Retryable:           false,
 			}, nil
 		}
 		if binding.Required {
 			return domain.ResolvedHandoff{
-				Status:   domain.ResolutionStatusMissing,
-				Decision: domain.ResolutionDecisionUnavailable,
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "artifact not registered by producer",
+				Retryable:           false,
 			}, nil
 		}
 		if terminal.TerminalState == "Succeeded" || terminal.TerminalState == "Failed" || terminal.TerminalState == "Canceled" {
 			return domain.ResolvedHandoff{
-				Status:   domain.ResolutionStatusMissing,
-				Decision: domain.ResolutionDecisionUnavailable,
+				Status:              domain.ResolutionStatusMissing,
+				Decision:            domain.ResolutionDecisionUnavailable,
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+				Reason:              "artifact not registered by producer",
+				Retryable:           false,
 			}, nil
 		}
 		return domain.ResolvedHandoff{
-			Status:   domain.ResolutionStatusPending,
-			Decision: domain.ResolutionDecisionUnavailable,
+			Status:              domain.ResolutionStatusPending,
+			Decision:            domain.ResolutionDecisionUnavailable,
+			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+			MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+			Reason:              "producer not yet terminal",
+			Retryable:           true,
 		}, nil
 	}
 	if binding.ExpectedDigest != "" {
@@ -176,28 +200,57 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		}
 	}
 	if targetNodeName != "" && artifact.NodeName != "" && targetNodeName == artifact.NodeName {
+		matPlan := domain.MaterializationPlan{
+			Mode: domain.MaterializationModeLocalReuse,
+			URI:  artifact.URI,
+		}
+		if artifact.Digest != "" {
+			matPlan.ExpectedDigest = artifact.Digest
+		}
+		if binding.ExpectedDigest != "" {
+			matPlan.ExpectedDigest = binding.ExpectedDigest
+		}
 		return domain.ResolvedHandoff{
-			Status:                  domain.ResolutionStatusResolved,
-			Decision:                domain.ResolutionDecisionLocalReuse,
-			SourceNodeName:          artifact.NodeName,
-			ArtifactURI:             artifact.URI,
-			RequiresMaterialization: false,
+			Status:   domain.ResolutionStatusResolved,
+			Decision: domain.ResolutionDecisionLocalReuse,
+			PlacementIntent: domain.PlacementIntent{
+				Mode:     domain.PlacementIntentModePreferredNode,
+				NodeName: artifact.NodeName,
+			},
+			MaterializationPlan: matPlan,
+			Reason:              "artifact available on target node",
+			Retryable:           false,
 		}, nil
 	}
 	switch binding.ConsumePolicy {
 	case domain.ConsumePolicySameNodeOnly:
 		return domain.ResolvedHandoff{
-			Status:   domain.ResolutionStatusMissing,
-			Decision: domain.ResolutionDecisionUnavailable,
+			Status:              domain.ResolutionStatusMissing,
+			Decision:            domain.ResolutionDecisionUnavailable,
+			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeRequiredNode, NodeName: artifact.NodeName},
+			MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+			Reason:              "policy requires same node",
+			Retryable:           false,
 		}, nil
 	default:
 		s.metrics.IncFallback()
+		matPlan := domain.MaterializationPlan{
+			Mode: domain.MaterializationModeRemoteFetch,
+			URI:  artifact.URI,
+		}
+		if artifact.Digest != "" {
+			matPlan.ExpectedDigest = artifact.Digest
+		}
+		if binding.ExpectedDigest != "" {
+			matPlan.ExpectedDigest = binding.ExpectedDigest
+		}
 		return domain.ResolvedHandoff{
-			Status:                  domain.ResolutionStatusResolved,
-			Decision:                domain.ResolutionDecisionRemoteFetch,
-			SourceNodeName:          artifact.NodeName,
-			ArtifactURI:             artifact.URI,
-			RequiresMaterialization: true,
+			Status:              domain.ResolutionStatusResolved,
+			Decision:            domain.ResolutionDecisionRemoteFetch,
+			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+			MaterializationPlan: matPlan,
+			Reason:              "artifact available via remote fetch",
+			Retryable:           false,
 		}, nil
 	}
 }
