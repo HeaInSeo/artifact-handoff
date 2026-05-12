@@ -20,13 +20,35 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
-	// SQLite supports only one concurrent writer; serialise via single connection.
+	// Single connection serialises writes. WAL mode lets external readers
+	// (e.g. sqlite3 CLI) proceed concurrently without blocking the writer.
 	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(30 * time.Minute)
+	db.SetConnMaxIdleTime(5 * time.Minute)
+	if err := sqliteApplyPragmas(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("apply pragmas: %w", err)
+	}
 	if err := sqliteMigrate(db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return &SQLiteStore{db: db}, nil
+}
+
+func sqliteApplyPragmas(db *sql.DB) error {
+	for _, pragma := range []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA busy_timeout=5000",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA foreign_keys=OFF",
+	} {
+		if _, err := db.Exec(pragma); err != nil {
+			return fmt.Errorf("%s: %w", pragma, err)
+		}
+	}
+	return nil
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
