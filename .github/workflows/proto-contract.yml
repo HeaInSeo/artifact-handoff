@@ -1,6 +1,12 @@
 name: Proto Contract
 
 on:
+  push:
+    paths:
+      - "api/proto/**"
+      - "buf.yaml"
+      - "buf.gen.yaml"
+      - ".github/workflows/proto-contract.yml"
   pull_request:
     paths:
       - "api/proto/**"
@@ -40,8 +46,13 @@ jobs:
       - name: Lint protobuf schema
         run: buf lint
 
-      - name: Check breaking changes against main
-        run: buf breaking --against '.git#branch=main'
+      - name: Check breaking changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            buf breaking --against '.git#branch=main'
+          else
+            buf breaking --against '.git#ref=HEAD~1'
+          fi
 
       - name: Regenerate and check for drift
         run: |

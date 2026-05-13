@@ -21,16 +21,20 @@ PR/push마다 자동 실행됩니다. 실패 시 merge 불가입니다.
 |-----------|------|------------|----------|
 | **Lint** | `.github/workflows/lint.yml` | 모든 push/PR (md 제외) | `make lint` (golangci-lint + depguard) |
 | **Test** | `.github/workflows/test.yml` | 모든 push/PR (md 제외) | `make test`, `make test-regression`, `make coverage` |
-| **Proto Contract** | `.github/workflows/proto-contract.yml` | `api/proto/**`, `buf.yaml`, `buf.gen.yaml` 변경 PR | `buf lint`, `buf breaking`, drift 검사 |
+| **Proto Contract** | `.github/workflows/proto-contract.yml` | `api/proto/**`, `buf.yaml`, `buf.gen.yaml` 변경 push/PR | `buf lint`, `buf breaking`, drift 검사 |
 
 ### Proto Contract 워크플로우 상세
 
 ```
-buf lint           → proto 스키마 스타일/규칙 검사 (MINIMAL)
-buf breaking       → wire-format 파괴적 변경 차단 (WIRE_JSON)
-buf generate       → 코드 재생성
-git diff --exit-code → 생성 코드 drift 검사
+buf lint              → proto 스키마 스타일/규칙 검사 (MINIMAL)
+buf breaking          → wire-format 파괴적 변경 차단 (WIRE_JSON)
+  push 이벤트         → HEAD~1 기준 (직전 커밋과 비교)
+  pull_request 이벤트 → main 기준 (브랜치 전체 비교)
+buf generate          → 코드 재생성
+git diff --exit-code  → 생성 코드 drift 검사
 ```
+
+> **단일 브랜치 전략:** main에 직접 push하는 것이 기본 흐름입니다. push 트리거가 주 가드레일이고, pull_request는 예외적으로 브랜치를 사용할 때를 위한 보조입니다.
 
 ---
 
