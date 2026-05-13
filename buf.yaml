@@ -1,0 +1,17 @@
+version: v2
+
+modules:
+  - path: api/proto
+
+lint:
+  # MINIMAL enforces basic proto hygiene (syntax, package naming, file naming).
+  # Upgrade to STANDARD after restructuring to the ah/v1/ directory layout
+  # that PACKAGE_DIRECTORY_MATCH and SERVICE_SUFFIX rules require.
+  use:
+    - MINIMAL
+
+breaking:
+  # WIRE_JSON catches all wire-format and JSON-mapping breaking changes:
+  # deleted fields, changed field numbers, changed types, deleted RPCs.
+  use:
+    - WIRE_JSON

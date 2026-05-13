@@ -12,12 +12,15 @@ GOLANGCI_LINT_VERSION := v2.11.3
 GOVULNCHECK := $(LOCALBIN)/govulncheck
 GOVULNCHECK_VERSION := v1.1.4
 
+BUF := $(LOCALBIN)/buf
+BUF_VERSION := v1.54.0
+
 PKGS_ALL := ./...
 PKGS_CORE := ./api/... ./cmd/... ./pkg/...
 PKGS_COVER := ./cmd/... ./pkg/...
 PKGS_SECURITY := ./cmd/... ./pkg/...
 
-.PHONY: test test-regression coverage fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck
+.PHONY: test test-regression coverage fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck buf proto proto-check
 
 test:
 	go test $(PKGS_ALL)
@@ -99,3 +102,16 @@ vuln-all: govulncheck
 	@set +e; \
 	$(GOVULNCHECK) ./... 2>&1 | tee "$(REPORT_DIR)/govulncheck-all.txt"; \
 	echo "govulncheck_all_exit=$$?" | tee "$(REPORT_DIR)/govulncheck-all.summary"
+
+buf:
+	@mkdir -p "$(LOCALBIN)"
+	@test -x "$(BUF)" || GOBIN="$(LOCALBIN)" go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+
+proto: buf
+	$(BUF) generate
+
+proto-check: buf
+	$(BUF) lint
+	$(BUF) breaking --against '.git#branch=main'
+	$(BUF) generate
+	git diff --exit-code -- api/proto/ahv1/

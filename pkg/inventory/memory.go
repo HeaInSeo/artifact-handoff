@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/HeaInSeo/artifact-handoff/internal/ids"
@@ -26,6 +27,16 @@ func NewMemoryStore() *MemoryStore {
 func (s *MemoryStore) PutArtifact(_ context.Context, artifact domain.Artifact) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	existing, exists := s.artifacts[artifact.Key()]
+	if exists && existing.Digest != "" {
+		if artifact.Digest == "" {
+			return fmt.Errorf("artifact %s already has digest %s; refusing to clear", artifact.Key(), existing.Digest)
+		}
+		if existing.Digest != artifact.Digest {
+			return fmt.Errorf("artifact %s: digest conflict: existing %s, new %s", artifact.Key(), existing.Digest, artifact.Digest)
+		}
+		return nil // same digest, idempotent
+	}
 	s.artifacts[artifact.Key()] = artifact
 	return nil
 }
@@ -69,11 +80,20 @@ func (s *MemoryStore) ListNodeTerminalsBySampleRun(_ context.Context, sampleRunI
 func (s *MemoryStore) RecordNodeTerminal(_ context.Context, record domain.NodeTerminalRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.nodeTerminals[ids.NodeAttemptKey{
+	key := ids.NodeAttemptKey{
 		SampleRunID: record.SampleRunID,
 		NodeID:      record.NodeID,
 		AttemptID:   record.AttemptID,
-	}.String()] = record
+	}.String()
+	existing, exists := s.nodeTerminals[key]
+	if exists {
+		if existing.TerminalState == record.TerminalState {
+			return nil // same state, idempotent
+		}
+		return fmt.Errorf("node %s/%s attempt %s: terminal state conflict: already %s, rejecting %s",
+			record.SampleRunID, record.NodeID, record.AttemptID, existing.TerminalState, record.TerminalState)
+	}
+	s.nodeTerminals[key] = record
 	return nil
 }
 

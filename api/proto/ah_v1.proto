@@ -1,5 +1,11 @@
 syntax = "proto3";
 
+// Field number assignment rules (enforced from first consumer integration):
+//   - Field numbers must never be reused within a message, even if the original field is removed.
+//   - Removing a field requires reserving its number: reserve 3; reserve "old_field_name";
+//   - Breaking changes require a new package (ah.v2) or an explicit pre-v1 reset documented in git.
+//   - See docs/CONTRACT_OWNERSHIP.md for the full contract policy.
+
 package ah.v1;
 
 option go_package = "github.com/HeaInSeo/artifact-handoff/api/proto/ahv1";
@@ -56,6 +62,10 @@ message MaterializationPlan {
 }
 
 message ResolveHandoffResponse {
+  // Field numbers 3–5 were reassigned during the pre-v1 reset (commit b829ed9).
+  // Reserve the old field names so the compiler blocks accidental reuse.
+  reserved "source_node_name", "artifact_uri", "requires_materialization";
+
   string resolution_status = 1;
   string decision = 2;
   PlacementIntent placement_intent = 3;

@@ -275,6 +275,142 @@ func TestSQLiteStore_Persistence(t *testing.T) {
 	}
 }
 
+func TestSQLiteStore_PutArtifact_DigestConflict(t *testing.T) {
+	s, cleanup := openSQLite(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	base := domain.Artifact{
+		SampleRunID:       "run-conflict",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:original",
+		URI:               "jumi://runs/run-conflict/output",
+		CreatedAt:         time.Now().UTC(),
+	}
+	if err := s.PutArtifact(ctx, base); err != nil {
+		t.Fatalf("first PutArtifact: %v", err)
+	}
+
+	tampered := base
+	tampered.Digest = "sha256:tampered"
+	if err := s.PutArtifact(ctx, tampered); err == nil {
+		t.Fatal("expected digest conflict error, got nil")
+	}
+}
+
+func TestSQLiteStore_PutArtifact_SameDigestIsIdempotent(t *testing.T) {
+	s, cleanup := openSQLite(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	a := domain.Artifact{
+		SampleRunID:       "run-idem",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:abc",
+		URI:               "jumi://runs/run-idem/output",
+		CreatedAt:         time.Now().UTC(),
+	}
+	if err := s.PutArtifact(ctx, a); err != nil {
+		t.Fatalf("first PutArtifact: %v", err)
+	}
+	if err := s.PutArtifact(ctx, a); err != nil {
+		t.Fatalf("second PutArtifact (same digest) must be idempotent: %v", err)
+	}
+}
+
+func TestSQLiteStore_RecordNodeTerminal_StateConflict(t *testing.T) {
+	s, cleanup := openSQLite(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	base := domain.NodeTerminalRecord{
+		SampleRunID:   "run-term-conflict",
+		NodeID:        "node-a",
+		AttemptID:     "attempt-1",
+		TerminalState: "Succeeded",
+		RecordedAt:    time.Now().UTC(),
+	}
+	if err := s.RecordNodeTerminal(ctx, base); err != nil {
+		t.Fatalf("first RecordNodeTerminal: %v", err)
+	}
+
+	conflict := base
+	conflict.TerminalState = "Failed"
+	if err := s.RecordNodeTerminal(ctx, conflict); err == nil {
+		t.Fatal("expected terminal state conflict error, got nil")
+	}
+}
+
+func TestSQLiteStore_RecordNodeTerminal_SameStateIsIdempotent(t *testing.T) {
+	s, cleanup := openSQLite(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	r := domain.NodeTerminalRecord{
+		SampleRunID:   "run-term-idem",
+		NodeID:        "node-a",
+		AttemptID:     "attempt-1",
+		TerminalState: "Succeeded",
+		RecordedAt:    time.Now().UTC(),
+	}
+	if err := s.RecordNodeTerminal(ctx, r); err != nil {
+		t.Fatalf("first RecordNodeTerminal: %v", err)
+	}
+	if err := s.RecordNodeTerminal(ctx, r); err != nil {
+		t.Fatalf("second RecordNodeTerminal (same state) must be idempotent: %v", err)
+	}
+}
+
+func TestMemoryStore_PutArtifact_DigestConflict(t *testing.T) {
+	s := inventory.NewMemoryStore()
+	ctx := context.Background()
+
+	base := domain.Artifact{
+		SampleRunID:       "run-mem-conflict",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:original",
+		URI:               "jumi://runs/run-mem-conflict/output",
+		CreatedAt:         time.Now().UTC(),
+	}
+	if err := s.PutArtifact(ctx, base); err != nil {
+		t.Fatalf("first PutArtifact: %v", err)
+	}
+
+	tampered := base
+	tampered.Digest = "sha256:tampered"
+	if err := s.PutArtifact(ctx, tampered); err == nil {
+		t.Fatal("expected digest conflict error, got nil")
+	}
+}
+
+func TestMemoryStore_RecordNodeTerminal_StateConflict(t *testing.T) {
+	s := inventory.NewMemoryStore()
+	ctx := context.Background()
+
+	base := domain.NodeTerminalRecord{
+		SampleRunID:   "run-mem-term-conflict",
+		NodeID:        "node-a",
+		AttemptID:     "attempt-1",
+		TerminalState: "Succeeded",
+		RecordedAt:    time.Now().UTC(),
+	}
+	if err := s.RecordNodeTerminal(ctx, base); err != nil {
+		t.Fatalf("first RecordNodeTerminal: %v", err)
+	}
+
+	conflict := base
+	conflict.TerminalState = "Failed"
+	if err := s.RecordNodeTerminal(ctx, conflict); err == nil {
+		t.Fatal("expected terminal state conflict error, got nil")
+	}
+}
+
 // TestOpenStore_DSN verifies the OpenStore factory routes DSNs correctly.
 func TestOpenStore_DSN(t *testing.T) {
 	t.Run("memory", func(t *testing.T) {

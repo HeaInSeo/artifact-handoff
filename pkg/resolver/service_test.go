@@ -1522,3 +1522,29 @@ func TestHTTPFinalizeAndEvaluateGC(t *testing.T) {
 		t.Fatalf("expected gcEligible key in lifecycle response: %s", getResp.Body.String())
 	}
 }
+
+func TestNotifyNodeTerminal_TerminalStateConflict(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	ctx := context.Background()
+
+	if err := service.NotifyNodeTerminal(ctx, "run-1", "node-a", "attempt-1", "Succeeded"); err != nil {
+		t.Fatalf("first NotifyNodeTerminal: %v", err)
+	}
+	if err := service.NotifyNodeTerminal(ctx, "run-1", "node-a", "attempt-1", "Failed"); err == nil {
+		t.Fatal("expected terminal state conflict error, got nil")
+	}
+}
+
+func TestNotifyNodeTerminal_SameStateIsIdempotent(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	ctx := context.Background()
+
+	if err := service.NotifyNodeTerminal(ctx, "run-1", "node-a", "attempt-1", "Succeeded"); err != nil {
+		t.Fatalf("first NotifyNodeTerminal: %v", err)
+	}
+	if err := service.NotifyNodeTerminal(ctx, "run-1", "node-a", "attempt-1", "Succeeded"); err != nil {
+		t.Fatalf("second NotifyNodeTerminal (same state) must be idempotent: %v", err)
+	}
+}

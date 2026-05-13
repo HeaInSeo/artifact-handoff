@@ -1,0 +1,15 @@
+version: v2
+
+# paths=import derives output path from go_package option.
+# go_package = "github.com/HeaInSeo/artifact-handoff/api/proto/ahv1"
+# → outputs to api/proto/ahv1/ relative to repo root.
+plugins:
+  - local: protoc-gen-go
+    out: .
+    opt:
+      - paths=import
+
+  - local: protoc-gen-go-grpc
+    out: .
+    opt:
+      - paths=import

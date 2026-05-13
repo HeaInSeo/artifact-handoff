@@ -98,7 +98,28 @@ func sqliteMigrate(db *sql.DB) error {
 }
 
 func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error {
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existingDigest string
+	err = tx.QueryRowContext(ctx, `SELECT digest FROM artifacts WHERE key = ?`, a.Key()).Scan(&existingDigest)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil && existingDigest != "" {
+		if a.Digest == "" {
+			return fmt.Errorf("artifact %s already has digest %s; refusing to clear", a.Key(), existingDigest)
+		}
+		if existingDigest != a.Digest {
+			return fmt.Errorf("artifact %s: digest conflict: existing %s, new %s", a.Key(), existingDigest, a.Digest)
+		}
+		return tx.Commit() // same digest, idempotent
+	}
+
+	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO artifacts (key, sample_run_id, producer_node_id, producer_attempt_id,
 			output_name, artifact_id, digest, node_name, uri, size_bytes, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -113,8 +134,10 @@ func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error 
 		a.SampleRunID, a.ProducerNodeID, a.ProducerAttemptID, a.OutputName,
 		a.ArtifactID, a.Digest, a.NodeName, a.URI, a.SizeBytes,
 		timeToStr(a.CreatedAt),
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) GetArtifact(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
@@ -167,21 +190,41 @@ func (s *SQLiteStore) ListArtifactsBySampleRun(ctx context.Context, sampleRunID 
 }
 
 func (s *SQLiteStore) RecordNodeTerminal(ctx context.Context, r domain.NodeTerminalRecord) error {
-	_, err := s.db.ExecContext(ctx, `
+	key := ids.NodeAttemptKey{
+		SampleRunID: r.SampleRunID,
+		NodeID:      r.NodeID,
+		AttemptID:   r.AttemptID,
+	}.String()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existingState string
+	err = tx.QueryRowContext(ctx, `SELECT terminal_state FROM node_terminals WHERE key = ?`, key).Scan(&existingState)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil {
+		if existingState == r.TerminalState {
+			return tx.Commit() // same state, idempotent
+		}
+		return fmt.Errorf("node %s/%s attempt %s: terminal state conflict: already %s, rejecting %s",
+			r.SampleRunID, r.NodeID, r.AttemptID, existingState, r.TerminalState)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO node_terminals (key, sample_run_id, node_id, attempt_id, terminal_state, recorded_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT(key) DO UPDATE SET
-			terminal_state = excluded.terminal_state,
-			recorded_at    = excluded.recorded_at`,
-		ids.NodeAttemptKey{
-			SampleRunID: r.SampleRunID,
-			NodeID:      r.NodeID,
-			AttemptID:   r.AttemptID,
-		}.String(),
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		key,
 		r.SampleRunID, r.NodeID, r.AttemptID, r.TerminalState,
 		timeToStr(r.RecordedAt),
-	)
-	return err
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *SQLiteStore) GetNodeTerminal(ctx context.Context, sampleRunID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error) {
