@@ -152,7 +152,7 @@ make proto-check    # buf lint + buf breaking + drift 검사
 
 | 항목 | 이유 | 예정 |
 |------|------|------|
-| buf STANDARD lint | 디렉토리 구조 재편 필요 (`ah/v1/` 레이아웃) | Proto v1 정식 릴리즈 전 |
+| buf PACKAGE_DIRECTORY_MATCH | 현재 `api/proto/ah_v1.proto` 위치가 패키지 `ah.v1`과 불일치. `ah/v1/` 레이아웃으로 재편 필요. 현재 `buf.yaml`에서 except 처리 중 | Proto v1 정식 릴리즈 전 |
 | Integration test (DB) | SQLite store TOCTOU 시나리오 실사 검증 | Phase 2 |
 | Rate limiting | Phase 2 범위 | Phase 2 |
 | 인증/인가 | Phase 2 범위 | Phase 2 |

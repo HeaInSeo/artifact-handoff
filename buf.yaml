@@ -5,10 +5,13 @@ modules:
 
 lint:
   # MINIMAL enforces basic proto hygiene (syntax, package naming, file naming).
-  # Upgrade to STANDARD after restructuring to the ah/v1/ directory layout
-  # that PACKAGE_DIRECTORY_MATCH and SERVICE_SUFFIX rules require.
+  # PACKAGE_DIRECTORY_MATCH is excluded because the current layout keeps the proto
+  # at api/proto/ah_v1.proto rather than api/proto/ah/v1/ah_v1.proto.
+  # Restructure to ah/v1/ and remove this exception when cutting the v1 release.
   use:
     - MINIMAL
+  except:
+    - PACKAGE_DIRECTORY_MATCH
 
 breaking:
   # WIRE_JSON catches all wire-format and JSON-mapping breaking changes:
