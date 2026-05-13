@@ -5,6 +5,16 @@
 
 ---
 
+## 브랜치 전략
+
+**단일 브랜치(main) 전략**을 사용합니다. 특별한 경우가 아니면 별도 브랜치를 만들지 않고 main에 직접 push합니다. 코딩은 주로 AI agent가 수행합니다.
+
+이 전략의 영향:
+- CI 가드레일은 **push 트리거가 주 경로**입니다. pull_request 트리거는 예외적으로 브랜치를 사용할 때를 위한 보조입니다.
+- `buf breaking` 등 baseline 비교가 필요한 가드레일은 이벤트 타입에 따라 기준을 다르게 설정합니다.
+
+---
+
 ## 계층 구조
 
 ```
@@ -15,13 +25,13 @@
 
 ## 1. CI 자동화 가드레일
 
-PR/push마다 자동 실행됩니다. 실패 시 merge 불가입니다.
+push마다 자동 실행됩니다 (단일 브랜치 전략 기준). 실패 시 후속 배포/통합을 막습니다.
 
-| 워크플로우 | 파일 | 트리거 조건 | 실행 내용 |
-|-----------|------|------------|----------|
-| **Lint** | `.github/workflows/lint.yml` | 모든 push/PR (md 제외) | `make lint` (golangci-lint + depguard) |
-| **Test** | `.github/workflows/test.yml` | 모든 push/PR (md 제외) | `make test`, `make test-regression`, `make coverage` |
-| **Proto Contract** | `.github/workflows/proto-contract.yml` | `api/proto/**`, `buf.yaml`, `buf.gen.yaml` 변경 push/PR | `buf lint`, `buf breaking`, drift 검사 |
+| 워크플로우 | 파일 | 주 트리거 | 보조 트리거 | 실행 내용 |
+|-----------|------|----------|------------|----------|
+| **Lint** | `.github/workflows/lint.yml` | push (md 제외) | PR (md 제외) | `make lint` (golangci-lint + depguard) |
+| **Test** | `.github/workflows/test.yml` | push (md 제외) | PR (md 제외) | `make test`, `make test-regression`, `make coverage` |
+| **Proto Contract** | `.github/workflows/proto-contract.yml` | push (`api/proto/**` 변경 시) | PR (`api/proto/**` 변경 시) | `buf lint`, `buf breaking`, drift 검사 |
 
 ### Proto Contract 워크플로우 상세
 
@@ -122,8 +132,8 @@ make proto-check    # buf lint + buf breaking + drift 검사
 |------|----------|
 | Field number 재사용 금지 | `buf breaking` (WIRE_JSON), proto `reserved` 선언 |
 | 삭제 필드 이름 재사용 금지 | proto `reserved "field_name"` |
-| 파괴적 변경 = PR 차단 | `buf breaking --against '.git#branch=main'` |
-| 생성 코드 drift = PR 차단 | `buf generate && git diff --exit-code` |
+| 파괴적 변경 → push/PR 차단 | push: `buf breaking --against '.git#ref=HEAD~1'` / PR: `--against '.git#branch=main'` |
+| 생성 코드 drift → push/PR 차단 | `buf generate && git diff --exit-code -- api/proto/ahv1/` |
 
 ---
 
