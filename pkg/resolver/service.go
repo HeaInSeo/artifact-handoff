@@ -3,6 +3,7 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"path"
 	"time"
 
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
@@ -105,10 +106,19 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 		return "", err
 	}
 	s.metrics.IncArtifactsRegistered()
+	hasNodeLocal := false
+	for _, loc := range artifact.Locations {
+		if loc.NodeLocal != nil && loc.NodeLocal.Path != "" {
+			hasNodeLocal = true
+			break
+		}
+	}
 	switch {
 	case artifact.NodeName != "" && artifact.URI != "":
 		return domain.AvailabilityStateBoth, nil
-	case artifact.NodeName != "":
+	case hasNodeLocal && artifact.URI != "":
+		return domain.AvailabilityStateBoth, nil
+	case hasNodeLocal || artifact.NodeName != "":
 		return domain.AvailabilityStateLocalOnly, nil
 	case artifact.URI != "":
 		return domain.AvailabilityStateRemoteOnly, nil
@@ -240,6 +250,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		}
 	}
 	// Build the materialization plan helpers up front — both branches may need them.
+	nodeLocalLocation := firstNodeLocalLocation(artifact)
 	localMatPlan := func() domain.MaterializationPlan {
 		mp := domain.MaterializationPlan{Mode: domain.MaterializationModeLocalReuse, URI: artifact.URI}
 		if artifact.Digest != "" {
@@ -247,6 +258,12 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		}
 		if binding.ExpectedDigest != "" {
 			mp.ExpectedDigest = binding.ExpectedDigest
+		}
+		if nodeLocalLocation != nil {
+			mp.SourceLocation = &domain.Location{NodeLocal: nodeLocalLocation}
+		}
+		if binding.ChildInputName != "" {
+			mp.LocalPath = path.Join("/work/inputs", binding.ChildInputName)
 		}
 		return mp
 	}
@@ -264,13 +281,13 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	// targetNodeName is known → post-scheduling check.
 	if targetNodeName != "" {
 		if artifact.NodeName != "" && targetNodeName == artifact.NodeName {
-			if artifact.URI == "" {
+			if nodeLocalLocation == nil && artifact.URI == "" {
 				return domain.ResolvedHandoff{
 					Status:              domain.ResolutionStatusUnavailable,
 					Decision:            domain.ResolutionDecisionUnavailable,
 					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
-					Reason:              "artifact URI unknown; cannot provide local reuse plan",
+					Reason:              "artifact local location unknown; cannot provide local reuse plan",
 					Retryable:           false,
 				}, nil
 			}
@@ -334,13 +351,13 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Retryable:           false,
 			}, nil
 		}
-		if artifact.URI == "" {
+		if nodeLocalLocation == nil && artifact.URI == "" {
 			return domain.ResolvedHandoff{
 				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
 				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
-				Reason:              "planning: artifact URI unknown; cannot provide materialization plan",
+				Reason:              "planning: artifact local location unknown; cannot provide materialization plan",
 				Retryable:           false,
 			}, nil
 		}
@@ -408,6 +425,15 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Retryable:           false,
 		}, nil
 	}
+}
+
+func firstNodeLocalLocation(artifact domain.Artifact) *domain.NodeLocalLocation {
+	for _, loc := range artifact.Locations {
+		if loc.NodeLocal != nil && loc.NodeLocal.Path != "" {
+			return loc.NodeLocal
+		}
+	}
+	return nil
 }
 
 func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {

@@ -35,7 +35,18 @@ func NewHTTPHandler(service *Service) http.Handler {
 			return
 		}
 		artifact := req.Artifact
-		if artifact == (domain.Artifact{}) {
+		if artifact.SampleRunID == "" &&
+			artifact.ProducerNodeID == "" &&
+			artifact.ProducerAttemptID == "" &&
+			artifact.OutputName == "" &&
+			artifact.ArtifactID == "" &&
+			artifact.Digest == "" &&
+			artifact.LogicalURI == "" &&
+			artifact.NodeName == "" &&
+			artifact.URI == "" &&
+			len(artifact.Locations) == 0 &&
+			artifact.SizeBytes == 0 &&
+			artifact.CreatedAt.IsZero() {
 			// Phase-1 backward compatibility: accept the older flat artifact body as well.
 			if err := json.NewDecoder(bytes.NewReader(body)).Decode(&artifact); err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)

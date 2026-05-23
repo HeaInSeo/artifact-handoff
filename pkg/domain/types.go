@@ -81,16 +81,18 @@ const (
 )
 
 type Artifact struct {
-	SampleRunID       string    `json:"sampleRunId"`
-	ProducerNodeID    string    `json:"producerNodeId"`
-	ProducerAttemptID string    `json:"producerAttemptId"`
-	OutputName        string    `json:"outputName"`
-	ArtifactID        string    `json:"artifactId,omitempty"`
-	Digest            string    `json:"digest,omitempty"`
-	NodeName          string    `json:"nodeName,omitempty"`
-	URI               string    `json:"uri,omitempty"`
-	SizeBytes         int64     `json:"sizeBytes,omitempty"`
-	CreatedAt         time.Time `json:"createdAt,omitempty"`
+	SampleRunID       string     `json:"sampleRunId"`
+	ProducerNodeID    string     `json:"producerNodeId"`
+	ProducerAttemptID string     `json:"producerAttemptId"`
+	OutputName        string     `json:"outputName"`
+	ArtifactID        string     `json:"artifactId,omitempty"`
+	Digest            string     `json:"digest,omitempty"`
+	LogicalURI        string     `json:"logicalUri,omitempty"`
+	NodeName          string     `json:"nodeName,omitempty"`
+	URI               string     `json:"uri,omitempty"`
+	Locations         []Location `json:"locations,omitempty"`
+	SizeBytes         int64      `json:"sizeBytes,omitempty"`
+	CreatedAt         time.Time  `json:"createdAt,omitempty"`
 }
 
 func (a Artifact) Key() string {
@@ -153,10 +155,21 @@ type PlacementIntent struct {
 	NodeName string              `json:"nodeName,omitempty"`
 }
 
+type Location struct {
+	NodeLocal *NodeLocalLocation `json:"nodeLocal,omitempty"`
+}
+
+type NodeLocalLocation struct {
+	NodeName string `json:"nodeName,omitempty"`
+	Path     string `json:"path,omitempty"`
+}
+
 type MaterializationPlan struct {
 	Mode           MaterializationMode `json:"mode"`
 	URI            string              `json:"uri,omitempty"`
 	ExpectedDigest string              `json:"expectedDigest,omitempty"`
+	SourceLocation *Location           `json:"sourceLocation,omitempty"`
+	LocalPath      string              `json:"localPath,omitempty"`
 }
 
 type ResolvedHandoff struct {

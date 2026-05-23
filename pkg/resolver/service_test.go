@@ -85,8 +85,10 @@ func TestResolveHandoffLocalReuse(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "model",
 		NodeName:          "node-a",
-		URI:               "file:///cache/model",
 		Digest:            "sha256:abc",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: "node-a", Path: "/var/lib/jumi-artifacts/cas/sha256/abc"},
+		}},
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -116,6 +118,47 @@ func TestResolveHandoffLocalReuse(t *testing.T) {
 	}
 	if resolved.MaterializationPlan.Mode != domain.MaterializationModeLocalReuse {
 		t.Fatalf("materialization mode = %s, want local_reuse", resolved.MaterializationPlan.Mode)
+	}
+	if resolved.MaterializationPlan.SourceLocation == nil || resolved.MaterializationPlan.SourceLocation.NodeLocal == nil {
+		t.Fatalf("sourceLocation = %#v, want nodeLocal source", resolved.MaterializationPlan.SourceLocation)
+	}
+	if resolved.MaterializationPlan.SourceLocation.NodeLocal.Path != "/var/lib/jumi-artifacts/cas/sha256/abc" {
+		t.Fatalf("nodeLocal.path = %q, want node-local CAS path", resolved.MaterializationPlan.SourceLocation.NodeLocal.Path)
+	}
+}
+
+func TestRegisterArtifactStoresLogicalURIAndLocations(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-logical",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-2",
+		OutputName:        "dataset",
+		LogicalURI:        "jumi://runs/sample-logical/nodes/producer-a/outputs/dataset",
+		NodeName:          "node-a",
+		Digest:            "sha256:abc",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: "node-a", Path: "/var/lib/jumi-artifacts/cas/sha256/abc"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	artifact, ok, err := store.GetArtifact(context.Background(), "sample-logical", "producer-a", "attempt-2", "dataset")
+	if err != nil {
+		t.Fatalf("get artifact: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected stored artifact")
+	}
+	if artifact.LogicalURI != "jumi://runs/sample-logical/nodes/producer-a/outputs/dataset" {
+		t.Fatalf("logicalUri = %q, want logical URI", artifact.LogicalURI)
+	}
+	if len(artifact.Locations) != 1 || artifact.Locations[0].NodeLocal == nil {
+		t.Fatalf("locations = %#v, want one nodeLocal location", artifact.Locations)
 	}
 }
 
@@ -1107,8 +1150,9 @@ func TestHTTPRegisterArtifact(t *testing.T) {
 		"producerNodeID":"producer-a",
 		"producerAttemptId":"attempt-1",
 		"outputName":"result.json",
+		"logicalUri":"jumi://runs/sample-http/nodes/producer-a/outputs/result.json",
 		"nodeName":"node-a",
-		"uri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
+		"locations":[{"nodeLocal":{"nodeName":"node-a","path":"/var/lib/jumi-artifacts/cas/sha256/http"}}]
 	}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
@@ -1122,8 +1166,8 @@ func TestHTTPRegisterArtifact(t *testing.T) {
 	if err := json.Unmarshal(resp.Body.Bytes(), &body); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	if body.AvailabilityState != string(domain.AvailabilityStateBoth) {
-		t.Fatalf("availabilityState = %q, want %q", body.AvailabilityState, domain.AvailabilityStateBoth)
+	if body.AvailabilityState != string(domain.AvailabilityStateLocalOnly) {
+		t.Fatalf("availabilityState = %q, want %q", body.AvailabilityState, domain.AvailabilityStateLocalOnly)
 	}
 }
 
@@ -1139,8 +1183,9 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 			"producerAttemptId":"attempt-1",
 			"outputName":"result.json",
 			"artifactId":"sample-http-env:producer-a:result.json",
+			"logicalUri":"jumi://runs/sample-http-env/nodes/producer-a/outputs/result.json",
 			"nodeName":"node-a",
-			"uri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
+			"locations":[{"nodeLocal":{"nodeName":"node-a","path":"/var/lib/jumi-artifacts/cas/sha256/env"}}]
 		}
 	}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -1158,6 +1203,9 @@ func TestHTTPRegisterArtifactAcceptsEnvelope(t *testing.T) {
 	}
 	if artifact.ArtifactID != "sample-http-env/producer-a/attempt-1/result.json" {
 		t.Fatalf("artifactId = %q, want canonical artifact identity", artifact.ArtifactID)
+	}
+	if artifact.LogicalURI != "jumi://runs/sample-http-env/nodes/producer-a/outputs/result.json" {
+		t.Fatalf("logicalUri = %q, want logical URI", artifact.LogicalURI)
 	}
 }
 
@@ -1381,7 +1429,8 @@ func TestHTTPResolveHandoff_LocalReuse(t *testing.T) {
 		"producerAttemptId":"attempt-1",
 		"outputName":"output",
 		"nodeName":"node-a",
-		"uri":"jumi://runs/sample-local/nodes/node-a/outputs/output",
+		"logicalUri":"jumi://runs/sample-local/nodes/node-a/outputs/output",
+		"locations":[{"nodeLocal":{"nodeName":"node-a","path":"/var/lib/jumi-artifacts/cas/sha256/local"}}],
 		"sizeBytes":1024
 	}`))
 	registerReq.Header.Set("Content-Type", "application/json")
@@ -1417,7 +1466,14 @@ func TestHTTPResolveHandoff_LocalReuse(t *testing.T) {
 			NodeName string `json:"nodeName"`
 		} `json:"placementIntent"`
 		MaterializationPlan struct {
-			Mode string `json:"mode"`
+			Mode           string `json:"mode"`
+			LocalPath      string `json:"localPath"`
+			SourceLocation struct {
+				NodeLocal struct {
+					NodeName string `json:"nodeName"`
+					Path     string `json:"path"`
+				} `json:"nodeLocal"`
+			} `json:"sourceLocation"`
 		} `json:"materializationPlan"`
 	}
 	if err := json.Unmarshal(resolveResp.Body.Bytes(), &body); err != nil {
@@ -1434,6 +1490,9 @@ func TestHTTPResolveHandoff_LocalReuse(t *testing.T) {
 	}
 	if body.MaterializationPlan.Mode != string(domain.MaterializationModeLocalReuse) {
 		t.Fatalf("materializationPlan.mode = %q, want local_reuse", body.MaterializationPlan.Mode)
+	}
+	if body.MaterializationPlan.SourceLocation.NodeLocal.Path != "/var/lib/jumi-artifacts/cas/sha256/local" {
+		t.Fatalf("materializationPlan.sourceLocation.nodeLocal.path = %q, want node-local path", body.MaterializationPlan.SourceLocation.NodeLocal.Path)
 	}
 }
 

@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -63,8 +64,10 @@ func sqliteMigrate(db *sql.DB) error {
 			output_name         TEXT NOT NULL,
 			artifact_id         TEXT NOT NULL DEFAULT '',
 			digest              TEXT NOT NULL DEFAULT '',
+			logical_uri         TEXT NOT NULL DEFAULT '',
 			node_name           TEXT NOT NULL DEFAULT '',
 			uri                 TEXT NOT NULL DEFAULT '',
+			locations_json      TEXT NOT NULL DEFAULT '[]',
 			size_bytes          INTEGER NOT NULL DEFAULT 0,
 			created_at          TEXT NOT NULL
 		);
@@ -94,7 +97,27 @@ func sqliteMigrate(db *sql.DB) error {
 			retained_artifact_bytes INTEGER NOT NULL DEFAULT 0
 		);
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+	for _, stmt := range []string{
+		`ALTER TABLE artifacts ADD COLUMN logical_uri TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE artifacts ADD COLUMN locations_json TEXT NOT NULL DEFAULT '[]'`,
+	} {
+		if _, err := db.Exec(stmt); err != nil && !isDuplicateColumn(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func isDuplicateColumn(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return msg == "SQL logic error: duplicate column name: logical_uri (1)" ||
+		msg == "SQL logic error: duplicate column name: locations_json (1)"
 }
 
 func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error {
@@ -121,18 +144,20 @@ func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error 
 
 	if _, err = tx.ExecContext(ctx, `
 		INSERT INTO artifacts (key, sample_run_id, producer_node_id, producer_attempt_id,
-			output_name, artifact_id, digest, node_name, uri, size_bytes, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			output_name, artifact_id, digest, logical_uri, node_name, uri, locations_json, size_bytes, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET
 			artifact_id = excluded.artifact_id,
 			digest      = excluded.digest,
+			logical_uri = excluded.logical_uri,
 			node_name   = excluded.node_name,
 			uri         = excluded.uri,
+			locations_json = excluded.locations_json,
 			size_bytes  = excluded.size_bytes,
 			created_at  = excluded.created_at`,
 		a.Key(),
 		a.SampleRunID, a.ProducerNodeID, a.ProducerAttemptID, a.OutputName,
-		a.ArtifactID, a.Digest, a.NodeName, a.URI, a.SizeBytes,
+		a.ArtifactID, a.Digest, a.LogicalURI, a.NodeName, a.URI, marshalLocations(a.Locations), a.SizeBytes,
 		timeToStr(a.CreatedAt),
 	); err != nil {
 		return err
@@ -143,7 +168,7 @@ func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error 
 func (s *SQLiteStore) GetArtifact(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT sample_run_id, producer_node_id, producer_attempt_id, output_name,
-		       artifact_id, digest, node_name, uri, size_bytes, created_at
+		       artifact_id, digest, logical_uri, node_name, uri, locations_json, size_bytes, created_at
 		FROM artifacts WHERE key = ?`,
 		ids.ArtifactKey{
 			SampleRunID:       sampleRunID,
@@ -154,13 +179,17 @@ func (s *SQLiteStore) GetArtifact(ctx context.Context, sampleRunID, producerNode
 	)
 	var a domain.Artifact
 	var createdAt string
+	var locationsJSON string
 	err := row.Scan(&a.SampleRunID, &a.ProducerNodeID, &a.ProducerAttemptID, &a.OutputName,
-		&a.ArtifactID, &a.Digest, &a.NodeName, &a.URI, &a.SizeBytes, &createdAt)
+		&a.ArtifactID, &a.Digest, &a.LogicalURI, &a.NodeName, &a.URI, &locationsJSON, &a.SizeBytes, &createdAt)
 	if err == sql.ErrNoRows {
 		return domain.Artifact{}, false, nil
 	}
 	if err != nil {
 		return domain.Artifact{}, false, err
+	}
+	if err := json.Unmarshal([]byte(locationsJSON), &a.Locations); err != nil {
+		return domain.Artifact{}, false, fmt.Errorf("unmarshal locations_json: %w", err)
 	}
 	a.CreatedAt, _ = parseTimeStr(createdAt)
 	return a, true, nil
@@ -169,7 +198,7 @@ func (s *SQLiteStore) GetArtifact(ctx context.Context, sampleRunID, producerNode
 func (s *SQLiteStore) ListArtifactsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT sample_run_id, producer_node_id, producer_attempt_id, output_name,
-		       artifact_id, digest, node_name, uri, size_bytes, created_at
+		       artifact_id, digest, logical_uri, node_name, uri, locations_json, size_bytes, created_at
 		FROM artifacts WHERE sample_run_id = ?`, sampleRunID)
 	if err != nil {
 		return nil, err
@@ -179,14 +208,29 @@ func (s *SQLiteStore) ListArtifactsBySampleRun(ctx context.Context, sampleRunID 
 	for rows.Next() {
 		var a domain.Artifact
 		var createdAt string
+		var locationsJSON string
 		if err := rows.Scan(&a.SampleRunID, &a.ProducerNodeID, &a.ProducerAttemptID, &a.OutputName,
-			&a.ArtifactID, &a.Digest, &a.NodeName, &a.URI, &a.SizeBytes, &createdAt); err != nil {
+			&a.ArtifactID, &a.Digest, &a.LogicalURI, &a.NodeName, &a.URI, &locationsJSON, &a.SizeBytes, &createdAt); err != nil {
 			return nil, err
+		}
+		if err := json.Unmarshal([]byte(locationsJSON), &a.Locations); err != nil {
+			return nil, fmt.Errorf("unmarshal locations_json: %w", err)
 		}
 		a.CreatedAt, _ = parseTimeStr(createdAt)
 		out = append(out, a)
 	}
 	return out, rows.Err()
+}
+
+func marshalLocations(locations []domain.Location) string {
+	if len(locations) == 0 {
+		return "[]"
+	}
+	data, err := json.Marshal(locations)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
 }
 
 func (s *SQLiteStore) RecordNodeTerminal(ctx context.Context, r domain.NodeTerminalRecord) error {
