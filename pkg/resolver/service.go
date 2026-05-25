@@ -263,7 +263,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			mp.SourceLocation = &domain.Location{NodeLocal: nodeLocalLocation}
 		}
 		if binding.ChildInputName != "" {
-			mp.LocalPath = path.Join("/work/inputs", binding.ChildInputName)
+			mp.LocalPath = path.Join("inputs", binding.ChildInputName)
 		}
 		return mp
 	}
