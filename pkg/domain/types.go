@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -157,11 +159,55 @@ type PlacementIntent struct {
 
 type Location struct {
 	NodeLocal *NodeLocalLocation `json:"nodeLocal,omitempty"`
+	HTTP      *HTTPSource        `json:"http,omitempty"`
 }
 
 type NodeLocalLocation struct {
 	NodeName string `json:"nodeName,omitempty"`
 	Path     string `json:"path,omitempty"`
+}
+
+type HTTPSource struct {
+	URI     string            `json:"uri,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
+
+type SourceState string
+
+const (
+	SourceStatePending     SourceState = "pending"
+	SourceStateReady       SourceState = "ready"
+	SourceStateStale       SourceState = "stale"
+	SourceStateUnreachable SourceState = "unreachable"
+	SourceStateDeleted     SourceState = "deleted"
+)
+
+type ArtifactSource struct {
+	SourceID            string      `json:"sourceId"`
+	ArtifactID          string      `json:"artifactId"`
+	BackendID           string      `json:"backendId"`
+	Digest              string      `json:"digest,omitempty"`
+	State               SourceState `json:"state"`
+	LocationFingerprint string      `json:"locationFingerprint,omitempty"`
+	Location            Location    `json:"location"`
+	CreatedAt           time.Time   `json:"createdAt,omitempty"`
+	UpdatedAt           time.Time   `json:"updatedAt,omitempty"`
+}
+
+func SourceID(artifactID, backendID, fingerprint string) string {
+	sum := sha256.Sum256([]byte(artifactID + "\x00" + backendID + "\x00" + fingerprint))
+	return "src-" + hex.EncodeToString(sum[:8])
+}
+
+func LocationFingerprint(location Location) string {
+	switch {
+	case location.NodeLocal != nil:
+		return fmt.Sprintf("node_local:%s:%s", location.NodeLocal.NodeName, location.NodeLocal.Path)
+	case location.HTTP != nil:
+		return fmt.Sprintf("http:%s", location.HTTP.URI)
+	default:
+		return ""
+	}
 }
 
 type MaterializationPlan struct {

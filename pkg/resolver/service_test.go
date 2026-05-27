@@ -162,6 +162,61 @@ func TestRegisterArtifactStoresLogicalURIAndLocations(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactCreatesInitialSources(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-sources",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        "sample-sources/producer-a/attempt-1/dataset",
+		Digest:            "sha256:abc123",
+		LogicalURI:        "jumi://runs/sample-sources/nodes/producer-a/outputs/dataset",
+		NodeName:          "node-a",
+		URI:               "http://artifact-source.local/artifacts/abc123",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: "node-a", Path: "/var/lib/jumi-artifacts/cas/sha256/abc123"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	sources, err := service.ListSources(context.Background(), "sample-sources/producer-a/attempt-1/dataset")
+	if err != nil {
+		t.Fatalf("list sources: %v", err)
+	}
+	if len(sources) != 2 {
+		t.Fatalf("len(sources) = %d, want 2", len(sources))
+	}
+	var sawNodeLocal, sawHTTP bool
+	for _, source := range sources {
+		if source.ArtifactID != "sample-sources/producer-a/attempt-1/dataset" {
+			t.Fatalf("source.ArtifactID = %q, want artifact id", source.ArtifactID)
+		}
+		if source.State != domain.SourceStateReady {
+			t.Fatalf("source.State = %q, want ready", source.State)
+		}
+		switch {
+		case source.Location.NodeLocal != nil:
+			sawNodeLocal = true
+			if source.BackendID != "node-local-default" {
+				t.Fatalf("node-local backendID = %q, want node-local-default", source.BackendID)
+			}
+		case source.Location.HTTP != nil:
+			sawHTTP = true
+			if source.BackendID != "legacy-http" {
+				t.Fatalf("http backendID = %q, want legacy-http", source.BackendID)
+			}
+		}
+	}
+	if !sawNodeLocal || !sawHTTP {
+		t.Fatalf("sources missing backend types: nodeLocal=%v http=%v", sawNodeLocal, sawHTTP)
+	}
+}
+
 func TestResolveHandoffRemoteFetch(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -1341,6 +1396,42 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 	}
 	if len(body.Artifacts) != 2 {
 		t.Fatalf("artifact count = %d, want 2", len(body.Artifacts))
+	}
+}
+
+func TestHTTPListSources(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-http-sources",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        "sample-http-sources/producer-a/attempt-1/dataset",
+		Digest:            "sha256:abc123",
+		URI:               "http://artifact-source.local/artifacts/abc123",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: "node-a", Path: "/var/lib/jumi-artifacts/cas/sha256/abc123"},
+		}},
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	handler := NewHTTPHandler(service)
+	req := httptest.NewRequest(http.MethodGet, "/v1/sources:list?artifactId=sample-http-sources/producer-a/attempt-1/dataset", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Sources []domain.ArtifactSource `json:"sources"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode sources body: %v", err)
+	}
+	if len(body.Sources) != 2 {
+		t.Fatalf("len(body.Sources) = %d, want 2", len(body.Sources))
 	}
 }
 

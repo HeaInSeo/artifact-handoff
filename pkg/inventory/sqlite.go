@@ -71,6 +71,17 @@ func sqliteMigrate(db *sql.DB) error {
 			size_bytes          INTEGER NOT NULL DEFAULT 0,
 			created_at          TEXT NOT NULL
 		);
+		CREATE TABLE IF NOT EXISTS artifact_sources (
+			source_id             TEXT PRIMARY KEY,
+			artifact_id           TEXT NOT NULL,
+			backend_id            TEXT NOT NULL,
+			digest                TEXT NOT NULL DEFAULT '',
+			state                 TEXT NOT NULL,
+			location_fingerprint  TEXT NOT NULL DEFAULT '',
+			location_json         TEXT NOT NULL,
+			created_at            TEXT NOT NULL,
+			updated_at            TEXT NOT NULL
+		);
 		CREATE TABLE IF NOT EXISTS node_terminals (
 			key            TEXT PRIMARY KEY,
 			sample_run_id  TEXT NOT NULL,
@@ -231,6 +242,83 @@ func marshalLocations(locations []domain.Location) string {
 		return "[]"
 	}
 	return string(data)
+}
+
+func marshalLocation(location domain.Location) string {
+	data, err := json.Marshal(location)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
+func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string, sources []domain.ArtifactSource) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, source := range sources {
+		if source.ArtifactID == "" {
+			source.ArtifactID = artifactID
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO artifact_sources (
+				source_id, artifact_id, backend_id, digest, state,
+				location_fingerprint, location_json, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(source_id) DO UPDATE SET
+				state = excluded.state,
+				location_json = excluded.location_json,
+				updated_at = excluded.updated_at`,
+			source.SourceID,
+			source.ArtifactID,
+			source.BackendID,
+			source.Digest,
+			string(source.State),
+			source.LocationFingerprint,
+			marshalLocation(source.Location),
+			timeToStr(source.CreatedAt),
+			timeToStr(source.UpdatedAt),
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *SQLiteStore) ListArtifactSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT source_id, artifact_id, backend_id, digest, state,
+		       location_fingerprint, location_json, created_at, updated_at
+		FROM artifact_sources
+		WHERE artifact_id = ?
+		ORDER BY source_id ASC`, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []domain.ArtifactSource
+	for rows.Next() {
+		var source domain.ArtifactSource
+		var state string
+		var locationJSON string
+		var createdAt, updatedAt string
+		if err := rows.Scan(
+			&source.SourceID, &source.ArtifactID, &source.BackendID, &source.Digest,
+			&state, &source.LocationFingerprint, &locationJSON, &createdAt, &updatedAt,
+		); err != nil {
+			return nil, err
+		}
+		source.State = domain.SourceState(state)
+		source.CreatedAt, _ = parseTimeStr(createdAt)
+		source.UpdatedAt, _ = parseTimeStr(updatedAt)
+		if err := json.Unmarshal([]byte(locationJSON), &source.Location); err != nil {
+			return nil, fmt.Errorf("unmarshal location_json: %w", err)
+		}
+		out = append(out, source)
+	}
+	return out, rows.Err()
 }
 
 func (s *SQLiteStore) RecordNodeTerminal(ctx context.Context, r domain.NodeTerminalRecord) error {

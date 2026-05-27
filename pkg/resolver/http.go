@@ -95,6 +95,18 @@ func NewHTTPHandler(service *Service) http.Handler {
 		}
 		writeJSON(w, map[string][]domain.Artifact{"artifacts": artifacts})
 	})
+	mux.HandleFunc("/v1/sources:list", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		sources, err := service.ListSourcesCore(r.Context(), r.URL.Query().Get("artifactId"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string][]domain.ArtifactSource{"sources": sources})
+	})
 	mux.HandleFunc("/v1/handoffs:resolve", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

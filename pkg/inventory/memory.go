@@ -10,17 +10,21 @@ import (
 )
 
 type MemoryStore struct {
-	mu            sync.RWMutex
-	artifacts     map[string]domain.Artifact
-	nodeTerminals map[string]domain.NodeTerminalRecord
-	sampleRuns    map[string]domain.SampleRunLifecycle
+	mu                  sync.RWMutex
+	artifacts           map[string]domain.Artifact
+	sources             map[string]domain.ArtifactSource
+	sourcesByArtifactID map[string][]string
+	nodeTerminals       map[string]domain.NodeTerminalRecord
+	sampleRuns          map[string]domain.SampleRunLifecycle
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		artifacts:     make(map[string]domain.Artifact),
-		nodeTerminals: make(map[string]domain.NodeTerminalRecord),
-		sampleRuns:    make(map[string]domain.SampleRunLifecycle),
+		artifacts:           make(map[string]domain.Artifact),
+		sources:             make(map[string]domain.ArtifactSource),
+		sourcesByArtifactID: make(map[string][]string),
+		nodeTerminals:       make(map[string]domain.NodeTerminalRecord),
+		sampleRuns:          make(map[string]domain.SampleRunLifecycle),
 	}
 }
 
@@ -61,6 +65,39 @@ func (s *MemoryStore) ListArtifactsBySampleRun(_ context.Context, sampleRunID st
 		if artifact.SampleRunID == sampleRunID {
 			out = append(out, artifact)
 		}
+	}
+	return out, nil
+}
+
+func (s *MemoryStore) PutArtifactSources(_ context.Context, artifactID string, sources []domain.ArtifactSource) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, source := range sources {
+		if source.ArtifactID == "" {
+			source.ArtifactID = artifactID
+		}
+		if source.SourceID == "" {
+			continue
+		}
+		s.sources[source.SourceID] = source
+		if !containsString(s.sourcesByArtifactID[artifactID], source.SourceID) {
+			s.sourcesByArtifactID[artifactID] = append(s.sourcesByArtifactID[artifactID], source.SourceID)
+		}
+	}
+	return nil
+}
+
+func (s *MemoryStore) ListArtifactSources(_ context.Context, artifactID string) ([]domain.ArtifactSource, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	idsForArtifact := s.sourcesByArtifactID[artifactID]
+	out := make([]domain.ArtifactSource, 0, len(idsForArtifact))
+	for _, sourceID := range idsForArtifact {
+		source, ok := s.sources[sourceID]
+		if !ok {
+			continue
+		}
+		out = append(out, source)
 	}
 	return out, nil
 }
@@ -120,4 +157,13 @@ func (s *MemoryStore) GetSampleRunLifecycle(_ context.Context, sampleRunID strin
 	defer s.mu.RUnlock()
 	lifecycle, ok := s.sampleRuns[sampleRunID]
 	return lifecycle, ok, nil
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

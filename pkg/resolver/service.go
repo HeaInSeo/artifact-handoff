@@ -69,6 +69,10 @@ func (s *Service) ListArtifactsBySampleRun(ctx context.Context, sampleRunID stri
 	return s.ListArtifactsBySampleRunCore(ctx, sampleRunID)
 }
 
+func (s *Service) ListSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
+	return s.ListSourcesCore(ctx, artifactID)
+}
+
 func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Artifact) (domain.AvailabilityState, error) {
 	if artifact.SampleRunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
 		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
@@ -103,6 +107,9 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 		}
 	}
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
+		return "", err
+	}
+	if err := s.store.PutArtifactSources(ctx, artifact.ArtifactID, initialSourcesForArtifact(artifact, s.now())); err != nil {
 		return "", err
 	}
 	s.metrics.IncArtifactsRegistered()
@@ -142,6 +149,13 @@ func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID 
 		return nil, fmt.Errorf("sampleRunID is required")
 	}
 	return s.store.ListArtifactsBySampleRun(ctx, sampleRunID)
+}
+
+func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
+	if artifactID == "" {
+		return nil, fmt.Errorf("artifactID is required")
+	}
+	return s.store.ListArtifactSources(ctx, artifactID)
 }
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
@@ -425,6 +439,45 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Retryable:           false,
 		}, nil
 	}
+}
+
+func initialSourcesForArtifact(artifact domain.Artifact, now time.Time) []domain.ArtifactSource {
+	var sources []domain.ArtifactSource
+	appendSource := func(backendID string, location domain.Location) {
+		fp := domain.LocationFingerprint(location)
+		if fp == "" {
+			return
+		}
+		source := domain.ArtifactSource{
+			SourceID:            domain.SourceID(artifact.ArtifactID, backendID, fp),
+			ArtifactID:          artifact.ArtifactID,
+			BackendID:           backendID,
+			Digest:              artifact.Digest,
+			State:               domain.SourceStateReady,
+			LocationFingerprint: fp,
+			Location:            location,
+			CreatedAt:           now,
+			UpdatedAt:           now,
+		}
+		for _, existing := range sources {
+			if existing.SourceID == source.SourceID {
+				return
+			}
+		}
+		sources = append(sources, source)
+	}
+	for _, location := range artifact.Locations {
+		switch {
+		case location.NodeLocal != nil:
+			appendSource("node-local-default", location)
+		case location.HTTP != nil:
+			appendSource("legacy-http", location)
+		}
+	}
+	if artifact.URI != "" {
+		appendSource("legacy-http", domain.Location{HTTP: &domain.HTTPSource{URI: artifact.URI}})
+	}
+	return sources
 }
 
 func firstNodeLocalLocation(artifact domain.Artifact) *domain.NodeLocalLocation {
