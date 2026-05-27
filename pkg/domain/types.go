@@ -218,12 +218,32 @@ type MaterializationPlan struct {
 	LocalPath      string              `json:"localPath,omitempty"`
 }
 
+type MaterializationCondition struct {
+	Kind      string `json:"kind"`
+	NodeName  string `json:"nodeName,omitempty"`
+	BackendID string `json:"backendId,omitempty"`
+	SourceRef string `json:"sourceRef,omitempty"`
+	State     string `json:"state,omitempty"`
+}
+
+type MaterializationCandidate struct {
+	Priority       int                        `json:"priority"`
+	Mode           MaterializationMode        `json:"mode"`
+	SourceRef      string                     `json:"sourceRef,omitempty"`
+	ExpectedDigest string                     `json:"expectedDigest,omitempty"`
+	LocalPath      string                     `json:"localPath,omitempty"`
+	SourceLocation *Location                  `json:"sourceLocation,omitempty"`
+	URI            string                     `json:"uri,omitempty"`
+	Conditions     []MaterializationCondition `json:"conditions,omitempty"`
+}
+
 type ResolvedHandoff struct {
 	Status   ResolutionStatus   `json:"resolutionStatus"`
 	Decision ResolutionDecision `json:"decision"`
 
-	PlacementIntent     PlacementIntent     `json:"placementIntent"`
-	MaterializationPlan MaterializationPlan `json:"materializationPlan"`
+	PlacementIntent           PlacementIntent            `json:"placementIntent"`
+	MaterializationPlan       MaterializationPlan        `json:"materializationPlan"`
+	MaterializationCandidates []MaterializationCandidate `json:"materializationCandidates,omitempty"`
 
 	Reason    string `json:"reason,omitempty"`
 	Retryable bool   `json:"retryable"`

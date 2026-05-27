@@ -683,6 +683,160 @@ func TestResolveHandoffPlanningMode_SameNodeThenRemote(t *testing.T) {
 	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
 		t.Fatalf("materializationPlan.mode = %q, want remote_fetch", resolved.MaterializationPlan.Mode)
 	}
+	if len(resolved.MaterializationCandidates) != 2 {
+		t.Fatalf("materializationCandidates len = %d, want 2", len(resolved.MaterializationCandidates))
+	}
+	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeLocalReuse {
+		t.Fatalf("materializationCandidates[0].mode = %q, want local_reuse", resolved.MaterializationCandidates[0].Mode)
+	}
+	if resolved.MaterializationCandidates[1].Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationCandidates[1].mode = %q, want remote_fetch", resolved.MaterializationCandidates[1].Mode)
+	}
+}
+
+func TestResolveHandoffPlanningMode_NodeLocalAndHTTPCreatesOrderedCandidates(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-http-local",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "http://artifact-source.local/artifacts/abc123",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: "k8s-node-1",
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/abc123",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-http-local",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+		ChildInputName:     "result",
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModePreferredNode {
+		t.Fatalf("placementIntent.mode = %q, want preferred_node", resolved.PlacementIntent.Mode)
+	}
+	if len(resolved.MaterializationCandidates) != 2 {
+		t.Fatalf("materializationCandidates len = %d, want 2", len(resolved.MaterializationCandidates))
+	}
+	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeLocalReuse {
+		t.Fatalf("materializationCandidates[0].mode = %q, want local_reuse", resolved.MaterializationCandidates[0].Mode)
+	}
+	if resolved.MaterializationCandidates[1].Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationCandidates[1].mode = %q, want remote_fetch", resolved.MaterializationCandidates[1].Mode)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("legacy materializationPlan.mode = %q, want remote_fetch", resolved.MaterializationPlan.Mode)
+	}
+}
+
+func TestResolveHandoffPlanningMode_NodeLocalOnlySameNodeThenRemoteRequiresPlacement(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-local-only",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: "k8s-node-1",
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/localonly",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-local-only",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeRequiredNode {
+		t.Fatalf("placementIntent.mode = %q, want required_node", resolved.PlacementIntent.Mode)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeLocalReuse {
+		t.Fatalf("materializationPlan.mode = %q, want local_reuse", resolved.MaterializationPlan.Mode)
+	}
+	if len(resolved.MaterializationCandidates) != 1 || resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeLocalReuse {
+		t.Fatalf("materializationCandidates = %#v, want one local_reuse candidate", resolved.MaterializationCandidates)
+	}
+}
+
+func TestResolveHandoffPlanningMode_IgnoresUnreachableNodeLocalSource(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-unreachable",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "http://artifact-source.local/artifacts/abc123",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: "k8s-node-1",
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/abc123",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	stored, ok, err := store.GetArtifact(context.Background(), "run-plan-unreachable", "node-a", "attempt-1", "output")
+	if err != nil || !ok {
+		t.Fatalf("get artifact: ok=%v err=%v", ok, err)
+	}
+	sources, err := store.ListArtifactSources(context.Background(), stored.ArtifactID)
+	if err != nil {
+		t.Fatalf("list sources: %v", err)
+	}
+	for i := range sources {
+		if sources[i].Location.NodeLocal != nil {
+			sources[i].State = domain.SourceStateUnreachable
+		}
+	}
+	if err := store.PutArtifactSources(context.Background(), stored.ArtifactID, sources); err != nil {
+		t.Fatalf("put sources: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-unreachable",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(resolved.MaterializationCandidates) != 1 {
+		t.Fatalf("materializationCandidates len = %d, want 1", len(resolved.MaterializationCandidates))
+	}
+	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationCandidates[0].mode = %q, want remote_fetch", resolved.MaterializationCandidates[0].Mode)
+	}
 }
 
 func TestResolveHandoffPlanningMode_RemoteOK(t *testing.T) {

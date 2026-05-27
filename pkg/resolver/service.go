@@ -263,39 +263,116 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			}, nil
 		}
 	}
-	// Build the materialization plan helpers up front — both branches may need them.
-	nodeLocalLocation := firstNodeLocalLocation(artifact)
-	localMatPlan := func() domain.MaterializationPlan {
-		mp := domain.MaterializationPlan{Mode: domain.MaterializationModeLocalReuse, URI: artifact.URI}
-		if artifact.Digest != "" {
-			mp.ExpectedDigest = artifact.Digest
-		}
-		if binding.ExpectedDigest != "" {
-			mp.ExpectedDigest = binding.ExpectedDigest
-		}
-		if nodeLocalLocation != nil {
-			mp.SourceLocation = &domain.Location{NodeLocal: nodeLocalLocation}
-		}
-		if binding.ChildInputName != "" {
-			mp.LocalPath = path.Join("inputs", binding.ChildInputName)
-		}
-		return mp
+	sources, err := s.store.ListArtifactSources(ctx, artifact.ArtifactID)
+	if err != nil {
+		return domain.ResolvedHandoff{}, err
 	}
-	remoteMatPlan := func() domain.MaterializationPlan {
-		mp := domain.MaterializationPlan{Mode: domain.MaterializationModeRemoteFetch, URI: artifact.URI}
-		if artifact.Digest != "" {
-			mp.ExpectedDigest = artifact.Digest
+	sources = effectiveArtifactSources(artifact, sources, s.now())
+	nodeLocalSource := firstReadyNodeLocalSource(sources)
+	remoteSource := firstReadyHTTPSource(sources)
+	expectedDigest := artifact.Digest
+	if binding.ExpectedDigest != "" {
+		expectedDigest = binding.ExpectedDigest
+	}
+	localPath := ""
+	if binding.ChildInputName != "" {
+		localPath = path.Join("inputs", binding.ChildInputName)
+	}
+	localCandidate := func(source domain.ArtifactSource, includeScheduledCondition bool) domain.MaterializationCandidate {
+		conditions := []domain.MaterializationCondition{{
+			Kind:      "source_state_ready",
+			SourceRef: source.SourceID,
+			State:     string(source.State),
+		}}
+		if includeScheduledCondition && source.Location.NodeLocal != nil && source.Location.NodeLocal.NodeName != "" {
+			conditions = append(conditions, domain.MaterializationCondition{
+				Kind:     "scheduled_on_node",
+				NodeName: source.Location.NodeLocal.NodeName,
+			})
 		}
-		if binding.ExpectedDigest != "" {
-			mp.ExpectedDigest = binding.ExpectedDigest
+		return domain.MaterializationCandidate{
+			Priority:       1,
+			Mode:           domain.MaterializationModeLocalReuse,
+			SourceRef:      source.SourceID,
+			ExpectedDigest: expectedDigest,
+			LocalPath:      localPath,
+			SourceLocation: &source.Location,
+			Conditions:     conditions,
 		}
-		return mp
+	}
+	remoteCandidate := func(source domain.ArtifactSource, priority int) domain.MaterializationCandidate {
+		conditions := []domain.MaterializationCondition{{
+			Kind:      "source_state_ready",
+			SourceRef: source.SourceID,
+			State:     string(source.State),
+		}, {
+			Kind:      "backend_available",
+			BackendID: source.BackendID,
+		}}
+		uri := ""
+		if source.Location.HTTP != nil {
+			uri = source.Location.HTTP.URI
+		}
+		return domain.MaterializationCandidate{
+			Priority:       priority,
+			Mode:           domain.MaterializationModeRemoteFetch,
+			SourceRef:      source.SourceID,
+			ExpectedDigest: expectedDigest,
+			LocalPath:      localPath,
+			SourceLocation: &source.Location,
+			URI:            uri,
+			Conditions:     conditions,
+		}
+	}
+	legacyPlanFromCandidate := func(candidate domain.MaterializationCandidate) domain.MaterializationPlan {
+		return domain.MaterializationPlan{
+			Mode:           candidate.Mode,
+			URI:            candidate.URI,
+			ExpectedDigest: candidate.ExpectedDigest,
+			SourceLocation: candidate.SourceLocation,
+			LocalPath:      candidate.LocalPath,
+		}
+	}
+	producerNodeName := artifact.NodeName
+	if nodeLocalSource != nil && nodeLocalSource.Location.NodeLocal != nil && nodeLocalSource.Location.NodeLocal.NodeName != "" {
+		producerNodeName = nodeLocalSource.Location.NodeLocal.NodeName
+	}
+	anyNodeLocalSource := hasAnyNodeLocalSource(sources)
+	localCandidates := []domain.MaterializationCandidate{}
+	if nodeLocalSource != nil {
+		localCandidates = append(localCandidates, localCandidate(*nodeLocalSource, targetNodeName == ""))
+	} else if !anyNodeLocalSource && producerNodeName != "" && artifact.URI != "" {
+		conditions := []domain.MaterializationCondition{}
+		if targetNodeName == "" {
+			conditions = append(conditions, domain.MaterializationCondition{
+				Kind:     "scheduled_on_node",
+				NodeName: producerNodeName,
+			})
+		}
+		localCandidates = append(localCandidates, domain.MaterializationCandidate{
+			Priority:       1,
+			Mode:           domain.MaterializationModeLocalReuse,
+			ExpectedDigest: expectedDigest,
+			LocalPath:      localPath,
+			URI:            artifact.URI,
+			Conditions:     conditions,
+		})
+	}
+	remoteCandidates := []domain.MaterializationCandidate{}
+	if remoteSource != nil {
+		priority := 1
+		if len(localCandidates) > 0 {
+			priority = 2
+		}
+		remoteCandidates = append(remoteCandidates, remoteCandidate(*remoteSource, priority))
 	}
 
 	// targetNodeName is known → post-scheduling check.
 	if targetNodeName != "" {
-		if artifact.NodeName != "" && targetNodeName == artifact.NodeName {
-			if nodeLocalLocation == nil && artifact.URI == "" {
+		if producerNodeName != "" && targetNodeName == producerNodeName && len(localCandidates) > 0 {
+			candidates := append([]domain.MaterializationCandidate{}, localCandidates...)
+			candidates = append(candidates, remoteCandidates...)
+			if len(candidates) == 0 {
 				return domain.ResolvedHandoff{
 					Status:              domain.ResolutionStatusUnavailable,
 					Decision:            domain.ResolutionDecisionUnavailable,
@@ -310,11 +387,12 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Decision: domain.ResolutionDecisionLocalReuse,
 				PlacementIntent: domain.PlacementIntent{
 					Mode:     domain.PlacementIntentModePreferredNode,
-					NodeName: artifact.NodeName,
+					NodeName: producerNodeName,
 				},
-				MaterializationPlan: localMatPlan(),
-				Reason:              "artifact available on target node",
-				Retryable:           false,
+				MaterializationPlan:       legacyPlanFromCandidate(candidates[0]),
+				MaterializationCandidates: candidates,
+				Reason:                    "artifact available on target node",
+				Retryable:                 false,
 			}, nil
 		}
 		// Consumer landed on a different node.
@@ -323,13 +401,13 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			return domain.ResolvedHandoff{
 				Status:              domain.ResolutionStatusPolicyBlocked,
 				Decision:            domain.ResolutionDecisionUnavailable,
-				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeRequiredNode, NodeName: artifact.NodeName},
+				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeRequiredNode, NodeName: producerNodeName},
 				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
 				Reason:              "policy requires same node but consumer is on a different node",
 				Retryable:           false,
 			}, nil
 		default:
-			if artifact.URI == "" {
+			if len(remoteCandidates) == 0 {
 				return domain.ResolvedHandoff{
 					Status:              domain.ResolutionStatusUnavailable,
 					Decision:            domain.ResolutionDecisionUnavailable,
@@ -341,12 +419,13 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			}
 			s.metrics.IncFallback()
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusResolved,
-				Decision:            domain.ResolutionDecisionRemoteFetch,
-				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
-				MaterializationPlan: remoteMatPlan(),
-				Reason:              "artifact available via remote fetch",
-				Retryable:           false,
+				Status:                    domain.ResolutionStatusResolved,
+				Decision:                  domain.ResolutionDecisionRemoteFetch,
+				PlacementIntent:           domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan:       legacyPlanFromCandidate(remoteCandidates[0]),
+				MaterializationCandidates: remoteCandidates,
+				Reason:                    "artifact available via remote fetch",
+				Retryable:                 false,
 			}, nil
 		}
 	}
@@ -355,7 +434,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	// IncFallback is NOT called here: this is a plan, not an executed fallback.
 	switch binding.ConsumePolicy {
 	case domain.ConsumePolicySameNodeOnly:
-		if artifact.NodeName == "" {
+		if len(localCandidates) == 0 || producerNodeName == "" {
 			return domain.ResolvedHandoff{
 				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
@@ -365,29 +444,20 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Retryable:           false,
 			}, nil
 		}
-		if nodeLocalLocation == nil && artifact.URI == "" {
-			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusUnavailable,
-				Decision:            domain.ResolutionDecisionUnavailable,
-				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
-				MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
-				Reason:              "planning: artifact local location unknown; cannot provide materialization plan",
-				Retryable:           false,
-			}, nil
-		}
 		return domain.ResolvedHandoff{
 			Status:   domain.ResolutionStatusResolved,
 			Decision: domain.ResolutionDecisionLocalReuse,
 			PlacementIntent: domain.PlacementIntent{
 				Mode:     domain.PlacementIntentModeRequiredNode,
-				NodeName: artifact.NodeName,
+				NodeName: producerNodeName,
 			},
-			MaterializationPlan: localMatPlan(),
-			Reason:              "planning: schedule consumer on producer node for local reuse",
-			Retryable:           false,
+			MaterializationPlan:       legacyPlanFromCandidate(localCandidates[0]),
+			MaterializationCandidates: localCandidates,
+			Reason:                    "planning: schedule consumer on producer node for local reuse",
+			Retryable:                 false,
 		}, nil
 	case domain.ConsumePolicySameNodeThenRemote:
-		if artifact.URI == "" {
+		if len(localCandidates) == 0 && len(remoteCandidates) == 0 {
 			return domain.ResolvedHandoff{
 				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
@@ -397,30 +467,56 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Retryable:           false,
 			}, nil
 		}
-		if artifact.NodeName == "" {
+		if len(localCandidates) == 0 || producerNodeName == "" {
 			// No locality hint; degrade to remote fetch without placement preference.
+			if len(remoteCandidates) == 0 {
+				return domain.ResolvedHandoff{
+					Status:              domain.ResolutionStatusUnavailable,
+					Decision:            domain.ResolutionDecisionUnavailable,
+					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
+					Reason:              "planning: artifact locality unknown and no fallback source is ready",
+					Retryable:           false,
+				}, nil
+			}
 			return domain.ResolvedHandoff{
-				Status:              domain.ResolutionStatusResolved,
-				Decision:            domain.ResolutionDecisionRemoteFetch,
-				PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
-				MaterializationPlan: remoteMatPlan(),
-				Reason:              "planning: artifact locality unknown; remote fetch without placement hint",
-				Retryable:           false,
+				Status:                    domain.ResolutionStatusResolved,
+				Decision:                  domain.ResolutionDecisionRemoteFetch,
+				PlacementIntent:           domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+				MaterializationPlan:       legacyPlanFromCandidate(remoteCandidates[0]),
+				MaterializationCandidates: remoteCandidates,
+				Reason:                    "planning: artifact locality unknown; remote fetch without placement hint",
+				Retryable:                 false,
 			}, nil
+		}
+		candidates := append([]domain.MaterializationCandidate{}, localCandidates...)
+		candidates = append(candidates, remoteCandidates...)
+		legacyPlan := domain.MaterializationPlan{Mode: domain.MaterializationModeNone}
+		decision := domain.ResolutionDecisionLocalReuse
+		reason := "planning: require producer node because no fallback source is ready"
+		placementMode := domain.PlacementIntentModeRequiredNode
+		if len(remoteCandidates) > 0 {
+			legacyPlan = legacyPlanFromCandidate(remoteCandidates[0])
+			decision = domain.ResolutionDecisionRemoteFetch
+			reason = "planning: prefer producer node; remote fetch if scheduled elsewhere"
+			placementMode = domain.PlacementIntentModePreferredNode
+		} else if len(localCandidates) > 0 {
+			legacyPlan = legacyPlanFromCandidate(localCandidates[0])
 		}
 		return domain.ResolvedHandoff{
 			Status:   domain.ResolutionStatusResolved,
-			Decision: domain.ResolutionDecisionRemoteFetch,
+			Decision: decision,
 			PlacementIntent: domain.PlacementIntent{
-				Mode:     domain.PlacementIntentModePreferredNode,
-				NodeName: artifact.NodeName,
+				Mode:     placementMode,
+				NodeName: producerNodeName,
 			},
-			MaterializationPlan: remoteMatPlan(),
-			Reason:              "planning: prefer producer node; remote fetch if scheduled elsewhere",
-			Retryable:           false,
+			MaterializationPlan:       legacyPlan,
+			MaterializationCandidates: candidates,
+			Reason:                    reason,
+			Retryable:                 false,
 		}, nil
 	default: // ConsumePolicyRemoteOK
-		if artifact.URI == "" {
+		if len(remoteCandidates) == 0 && len(localCandidates) == 0 {
 			return domain.ResolvedHandoff{
 				Status:              domain.ResolutionStatusUnavailable,
 				Decision:            domain.ResolutionDecisionUnavailable,
@@ -430,13 +526,22 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 				Retryable:           false,
 			}, nil
 		}
+		candidates := append([]domain.MaterializationCandidate{}, localCandidates...)
+		candidates = append(candidates, remoteCandidates...)
+		legacyPlan := domain.MaterializationPlan{Mode: domain.MaterializationModeNone}
+		if len(remoteCandidates) > 0 {
+			legacyPlan = legacyPlanFromCandidate(remoteCandidates[0])
+		} else if len(localCandidates) > 0 {
+			legacyPlan = legacyPlanFromCandidate(localCandidates[0])
+		}
 		return domain.ResolvedHandoff{
-			Status:              domain.ResolutionStatusResolved,
-			Decision:            domain.ResolutionDecisionRemoteFetch,
-			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
-			MaterializationPlan: remoteMatPlan(),
-			Reason:              "planning: remote fetch, no placement constraint",
-			Retryable:           false,
+			Status:                    domain.ResolutionStatusResolved,
+			Decision:                  domain.ResolutionDecisionRemoteFetch,
+			PlacementIntent:           domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
+			MaterializationPlan:       legacyPlan,
+			MaterializationCandidates: candidates,
+			Reason:                    "planning: remote fetch, no placement constraint",
+			Retryable:                 false,
 		}, nil
 	}
 }
@@ -480,13 +585,42 @@ func initialSourcesForArtifact(artifact domain.Artifact, now time.Time) []domain
 	return sources
 }
 
-func firstNodeLocalLocation(artifact domain.Artifact) *domain.NodeLocalLocation {
-	for _, loc := range artifact.Locations {
-		if loc.NodeLocal != nil && loc.NodeLocal.Path != "" {
-			return loc.NodeLocal
+func effectiveArtifactSources(artifact domain.Artifact, sources []domain.ArtifactSource, now time.Time) []domain.ArtifactSource {
+	if len(sources) > 0 {
+		return sources
+	}
+	return initialSourcesForArtifact(artifact, now)
+}
+
+func firstReadyNodeLocalSource(sources []domain.ArtifactSource) *domain.ArtifactSource {
+	for i := range sources {
+		if sources[i].State == domain.SourceStateReady &&
+			sources[i].Location.NodeLocal != nil &&
+			sources[i].Location.NodeLocal.Path != "" {
+			return &sources[i]
 		}
 	}
 	return nil
+}
+
+func firstReadyHTTPSource(sources []domain.ArtifactSource) *domain.ArtifactSource {
+	for i := range sources {
+		if sources[i].State == domain.SourceStateReady &&
+			sources[i].Location.HTTP != nil &&
+			sources[i].Location.HTTP.URI != "" {
+			return &sources[i]
+		}
+	}
+	return nil
+}
+
+func hasAnyNodeLocalSource(sources []domain.ArtifactSource) bool {
+	for i := range sources {
+		if sources[i].Location.NodeLocal != nil && sources[i].Location.NodeLocal.Path != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {
