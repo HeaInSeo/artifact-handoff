@@ -99,6 +99,15 @@ type Artifact struct {
 	CreatedAt         time.Time  `json:"createdAt,omitempty"`
 }
 
+func ValidateArtifactForRegistration(artifact Artifact) error {
+	for _, location := range artifact.Locations {
+		if err := ValidateArtifactLocation(location); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (a Artifact) Key() string {
 	return ids.ArtifactKey{
 		SampleRunID:       a.SampleRunID,
@@ -239,6 +248,18 @@ func (l Location) ValidateTypedUnion() error {
 	}
 }
 
+func ValidateArtifactLocation(location Location) error {
+	if err := location.ValidateTypedUnion(); err != nil {
+		return err
+	}
+	if location.HTTP != nil {
+		if err := validateHTTPSource(*location.HTTP); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (l Location) backendCount() int {
 	count := 0
 	if l.NodeLocal != nil {
@@ -285,8 +306,11 @@ func ValidateArtifactSourceForArtifact(artifact Artifact, source ArtifactSource)
 	if artifact.ArtifactID != "" && source.ArtifactID != artifact.ArtifactID {
 		return fmt.Errorf("source artifactID %q does not match artifactID %q", source.ArtifactID, artifact.ArtifactID)
 	}
-	if strings.TrimSpace(source.Digest) == "" || strings.TrimSpace(artifact.Digest) == "" {
-		return nil
+	if strings.TrimSpace(source.Digest) == "" {
+		return fmt.Errorf("source digest is required")
+	}
+	if strings.TrimSpace(artifact.Digest) == "" {
+		return fmt.Errorf("artifact digest is required")
 	}
 	if source.Digest != artifact.Digest {
 		return fmt.Errorf("source digest %q does not match artifact digest %q", source.Digest, artifact.Digest)

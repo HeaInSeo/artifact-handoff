@@ -22,6 +22,7 @@ type Service struct {
 	minRetention          time.Duration
 	retentionPolicySource string
 	httpAllowedHosts      map[string]struct{}
+	allowAnyHTTPSource    bool
 }
 
 func NewService(store inventory.Store) (*Service, error) {
@@ -36,6 +37,7 @@ func NewService(store inventory.Store) (*Service, error) {
 		minRetention:          15 * time.Minute,
 		retentionPolicySource: "service_default",
 		httpAllowedHosts:      parseAllowedHTTPHosts(os.Getenv("AH_ALLOWED_HTTP_SOURCE_HOSTS")),
+		allowAnyHTTPSource:    parseBoolEnv(os.Getenv("AH_ALLOW_ANY_HTTP_SOURCE")),
 	}, nil
 }
 
@@ -111,6 +113,9 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 			return "", fmt.Errorf("artifact %s already registered with digest %s; rejecting re-registration with digest %s",
 				artifact.Key(), existing.Digest, artifact.Digest)
 		}
+	}
+	if err := domain.ValidateArtifactForRegistration(artifact); err != nil {
+		return "", err
 	}
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
 		return "", err
@@ -597,6 +602,9 @@ func initialSourcesForArtifact(artifact domain.Artifact, now time.Time) []domain
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}
+		if source.Location.NodeLocal != nil && source.Location.NodeLocal.NodeName == "" && artifact.NodeName != "" {
+			source.Location.NodeLocal.NodeName = artifact.NodeName
+		}
 		if err := domain.ValidateArtifactSourceForArtifact(artifact, source); err != nil {
 			return
 		}
@@ -637,7 +645,7 @@ func (s *Service) candidateEligibleArtifactSources(artifact domain.Artifact, sou
 		if err := domain.ValidateArtifactSourceForArtifact(artifact, source); err != nil {
 			continue
 		}
-		if err := validateCandidateSource(source, s.httpAllowedHosts); err != nil {
+		if err := validateCandidateSource(source, s.httpAllowedHosts, s.allowAnyHTTPSource); err != nil {
 			continue
 		}
 		filtered = append(filtered, source)
@@ -645,7 +653,7 @@ func (s *Service) candidateEligibleArtifactSources(artifact domain.Artifact, sou
 	return filtered
 }
 
-func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[string]struct{}) error {
+func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[string]struct{}, allowAny bool) error {
 	if source.Location.HTTP == nil {
 		return nil
 	}
@@ -662,6 +670,9 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 	if host == "" {
 		return fmt.Errorf("http source host is required")
 	}
+	if len(allowedHosts) == 0 && !allowAny {
+		return fmt.Errorf("http source allowlist is required")
+	}
 	if len(allowedHosts) != 0 {
 		if _, ok := allowedHosts[strings.ToLower(host)]; !ok {
 			return fmt.Errorf("http source host %q is not in allowlist", host)
@@ -673,6 +684,16 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 		}
 	}
 	return nil
+}
+
+func parseBoolEnv(raw string) bool {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	switch raw {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 func parseAllowedHTTPHosts(raw string) map[string]struct{} {

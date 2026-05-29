@@ -15,6 +15,7 @@ import (
 
 func newTestService(t testing.TB, store inventory.Store) *Service {
 	t.Helper()
+	t.Setenv("AH_ALLOW_ANY_HTTP_SOURCE", "true")
 	svc, err := NewService(store)
 	if err != nil {
 		t.Fatal(err)
@@ -214,6 +215,42 @@ func TestRegisterArtifactCreatesInitialSources(t *testing.T) {
 	}
 	if !sawNodeLocal || !sawHTTP {
 		t.Fatalf("sources missing backend types: nodeLocal=%v http=%v", sawNodeLocal, sawHTTP)
+	}
+}
+
+func TestRegisterArtifactRejectsHTTPHeadersAndDoesNotPersist(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-reject",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        "sample-reject/producer-a/attempt-1/dataset",
+		Digest:            "sha256:abc123",
+		Locations: []domain.Location{{
+			HTTP: &domain.HTTPSource{
+				URI:     "http://artifact-source.local/artifacts/abc123",
+				Headers: map[string]string{"Authorization": "Bearer t"},
+			},
+		}},
+	})
+	if err == nil {
+		t.Fatal("expected register artifact to reject credential-bearing HTTP headers")
+	}
+
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-reject", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite registration rejection")
+	}
+	sources, err := store.ListArtifactSources(context.Background(), "sample-reject/producer-a/attempt-1/dataset")
+	if err != nil {
+		t.Fatalf("list artifact sources: %v", err)
+	}
+	if len(sources) != 0 {
+		t.Fatalf("sources = %#v, want none after registration rejection", sources)
 	}
 }
 
@@ -790,6 +827,52 @@ func TestResolveHandoffPlanningMode_NodeLocalAndHTTPCreatesOrderedCandidates(t *
 	}
 }
 
+func TestResolveHandoffPlanningMode_BackfillsNodeLocalConditionFromArtifactNodeName(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-local-fallback-node",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		Digest:            "sha256:fallbacknode",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				Path: "/var/lib/jumi-artifacts/cas/sha256/fallbacknode",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-local-fallback-node",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeOnly,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(resolved.MaterializationCandidates) != 1 {
+		t.Fatalf("materializationCandidates = %#v, want one local candidate", resolved.MaterializationCandidates)
+	}
+	conditions := resolved.MaterializationCandidates[0].Conditions
+	found := false
+	for _, cond := range conditions {
+		if cond.Kind == "scheduled_on_node" && cond.NodeName == "k8s-node-1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("conditions = %#v, want scheduled_on_node=k8s-node-1", conditions)
+	}
+}
+
 func TestResolveHandoffPlanningMode_NodeLocalOnlySameNodeThenRemoteRequiresPlacement(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -1006,6 +1089,87 @@ func TestResolveHandoffPlanningMode_IgnoresDigestMismatchedNodeLocalSource(t *te
 	}
 	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeRemoteFetch {
 		t.Fatalf("materializationCandidates[0].mode = %q, want remote_fetch", resolved.MaterializationCandidates[0].Mode)
+	}
+}
+
+func TestResolveHandoffPlanningMode_IgnoresReadySourceWithoutDigest(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "run-plan-no-source-digest/node-a/attempt-1/output"
+	artifact := domain.Artifact{
+		SampleRunID:       "run-plan-no-source-digest",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+		NodeName:          "k8s-node-1",
+	}
+	if err := store.PutArtifact(context.Background(), artifact); err != nil {
+		t.Fatalf("put artifact: %v", err)
+	}
+	if err := store.PutArtifactSources(context.Background(), artifactID, []domain.ArtifactSource{{
+		SourceID:   "src-http",
+		ArtifactID: artifactID,
+		BackendID:  "legacy-http",
+		State:      domain.SourceStateReady,
+		Location: domain.Location{
+			HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/abc123"},
+		},
+	}}); err != nil {
+		t.Fatalf("put sources: %v", err)
+	}
+	notifyTerminal(t, service, "run-plan-no-source-digest", "node-a", "attempt-1", "Succeeded")
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-no-source-digest",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(resolved.MaterializationCandidates) != 0 {
+		t.Fatalf("materializationCandidates = %#v, want none", resolved.MaterializationCandidates)
+	}
+}
+
+func TestResolveHandoffPlanningMode_RejectsHTTPSourceWithoutAllowlistByDefault(t *testing.T) {
+	t.Setenv("AH_ALLOW_ANY_HTTP_SOURCE", "false")
+
+	store := inventory.NewMemoryStore()
+	service, err := NewService(store)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-http-default-reject",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		Digest:            "sha256:plan3",
+		URI:               "http://artifact-source.local/artifacts/plan3",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	notifyTerminal(t, service, "run-plan-http-default-reject", "node-a", "attempt-1", "Succeeded")
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-http-default-reject",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusUnavailable {
+		t.Fatalf("status = %q, want UNAVAILABLE", resolved.Status)
 	}
 }
 
