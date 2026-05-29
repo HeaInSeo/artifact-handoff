@@ -268,8 +268,9 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		return domain.ResolvedHandoff{}, err
 	}
 	sources = effectiveArtifactSources(artifact, sources, s.now())
-	nodeLocalSource := firstReadyNodeLocalSource(sources)
-	remoteSource := firstReadyHTTPSource(sources)
+	candidateSources := candidateEligibleArtifactSources(artifact, sources)
+	nodeLocalSource := firstReadyNodeLocalSource(candidateSources)
+	remoteSource := firstReadyHTTPSource(candidateSources)
 	expectedDigest := artifact.Digest
 	if binding.ExpectedDigest != "" {
 		expectedDigest = binding.ExpectedDigest
@@ -564,6 +565,9 @@ func initialSourcesForArtifact(artifact domain.Artifact, now time.Time) []domain
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}
+		if err := domain.ValidateArtifactSourceForArtifact(artifact, source); err != nil {
+			return
+		}
 		for _, existing := range sources {
 			if existing.SourceID == source.SourceID {
 				return
@@ -590,6 +594,20 @@ func effectiveArtifactSources(artifact domain.Artifact, sources []domain.Artifac
 		return sources
 	}
 	return initialSourcesForArtifact(artifact, now)
+}
+
+func candidateEligibleArtifactSources(artifact domain.Artifact, sources []domain.ArtifactSource) []domain.ArtifactSource {
+	filtered := make([]domain.ArtifactSource, 0, len(sources))
+	for _, source := range sources {
+		if source.State != domain.SourceStateReady {
+			continue
+		}
+		if err := domain.ValidateArtifactSourceForArtifact(artifact, source); err != nil {
+			continue
+		}
+		filtered = append(filtered, source)
+	}
+	return filtered
 }
 
 func firstReadyNodeLocalSource(sources []domain.ArtifactSource) *domain.ArtifactSource {

@@ -839,6 +839,127 @@ func TestResolveHandoffPlanningMode_IgnoresUnreachableNodeLocalSource(t *testing
 	}
 }
 
+func TestResolveHandoffPlanningMode_ExcludesNonReadyNodeLocalSources(t *testing.T) {
+	states := []domain.SourceState{
+		domain.SourceStateStale,
+		domain.SourceStateUnreachable,
+		domain.SourceStateDeleted,
+	}
+	for _, state := range states {
+		t.Run(string(state), func(t *testing.T) {
+			store := inventory.NewMemoryStore()
+			service := newTestService(t, store)
+			if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+				SampleRunID:       "run-plan-nonready-" + string(state),
+				ProducerNodeID:    "node-a",
+				ProducerAttemptID: "attempt-1",
+				OutputName:        "output",
+				NodeName:          "k8s-node-1",
+				Digest:            "sha256:abc123",
+				URI:               "http://artifact-source.local/artifacts/abc123",
+				Locations: []domain.Location{{
+					NodeLocal: &domain.NodeLocalLocation{
+						NodeName: "k8s-node-1",
+						Path:     "/var/lib/jumi-artifacts/cas/sha256/abc123",
+					},
+				}},
+			}); err != nil {
+				t.Fatalf("register: %v", err)
+			}
+			stored, ok, err := store.GetArtifact(context.Background(), "run-plan-nonready-"+string(state), "node-a", "attempt-1", "output")
+			if err != nil || !ok {
+				t.Fatalf("get artifact: ok=%v err=%v", ok, err)
+			}
+			sources, err := store.ListArtifactSources(context.Background(), stored.ArtifactID)
+			if err != nil {
+				t.Fatalf("list sources: %v", err)
+			}
+			for i := range sources {
+				if sources[i].Location.NodeLocal != nil {
+					sources[i].State = state
+				}
+			}
+			if err := store.PutArtifactSources(context.Background(), stored.ArtifactID, sources); err != nil {
+				t.Fatalf("put sources: %v", err)
+			}
+
+			resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+				BindingName:        "input",
+				SampleRunID:        "run-plan-nonready-" + string(state),
+				ProducerNodeID:     "node-a",
+				ProducerAttemptID:  "attempt-1",
+				ProducerOutputName: "output",
+				ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+			}, "")
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			if len(resolved.MaterializationCandidates) != 1 {
+				t.Fatalf("materializationCandidates len = %d, want 1", len(resolved.MaterializationCandidates))
+			}
+			if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeRemoteFetch {
+				t.Fatalf("materializationCandidates[0].mode = %q, want remote_fetch", resolved.MaterializationCandidates[0].Mode)
+			}
+		})
+	}
+}
+
+func TestResolveHandoffPlanningMode_IgnoresDigestMismatchedNodeLocalSource(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-digest-mismatch",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		Digest:            "sha256:abc123",
+		URI:               "http://artifact-source.local/artifacts/abc123",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: "k8s-node-1",
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/abc123",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	stored, ok, err := store.GetArtifact(context.Background(), "run-plan-digest-mismatch", "node-a", "attempt-1", "output")
+	if err != nil || !ok {
+		t.Fatalf("get artifact: ok=%v err=%v", ok, err)
+	}
+	sources, err := store.ListArtifactSources(context.Background(), stored.ArtifactID)
+	if err != nil {
+		t.Fatalf("list sources: %v", err)
+	}
+	for i := range sources {
+		if sources[i].Location.NodeLocal != nil {
+			sources[i].Digest = "sha256:def456"
+		}
+	}
+	if err := store.PutArtifactSources(context.Background(), stored.ArtifactID, sources); err != nil {
+		t.Fatalf("put sources: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-digest-mismatch",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if len(resolved.MaterializationCandidates) != 1 {
+		t.Fatalf("materializationCandidates len = %d, want 1", len(resolved.MaterializationCandidates))
+	}
+	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationCandidates[0].mode = %q, want remote_fetch", resolved.MaterializationCandidates[0].Mode)
+	}
+}
+
 func TestResolveHandoffPlanningMode_RemoteOK(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)

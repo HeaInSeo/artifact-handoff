@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/HeaInSeo/artifact-handoff/internal/ids"
@@ -162,6 +163,14 @@ type Location struct {
 	HTTP      *HTTPSource        `json:"http,omitempty"`
 }
 
+type SourceBackendType string
+
+const (
+	SourceBackendTypeUnknown   SourceBackendType = ""
+	SourceBackendTypeNodeLocal SourceBackendType = "node_local"
+	SourceBackendTypeHTTP      SourceBackendType = "http"
+)
+
 type NodeLocalLocation struct {
 	NodeName string `json:"nodeName,omitempty"`
 	Path     string `json:"path,omitempty"`
@@ -192,6 +201,91 @@ type ArtifactSource struct {
 	Location            Location    `json:"location"`
 	CreatedAt           time.Time   `json:"createdAt,omitempty"`
 	UpdatedAt           time.Time   `json:"updatedAt,omitempty"`
+}
+
+func BackendTypeForID(backendID string) SourceBackendType {
+	switch strings.TrimSpace(backendID) {
+	case "node-local-default":
+		return SourceBackendTypeNodeLocal
+	case "legacy-http", "lab-http-cache":
+		return SourceBackendTypeHTTP
+	default:
+		return SourceBackendTypeUnknown
+	}
+}
+
+func (l Location) BackendType() SourceBackendType {
+	switch count := l.backendCount(); {
+	case count != 1:
+		return SourceBackendTypeUnknown
+	case l.NodeLocal != nil:
+		return SourceBackendTypeNodeLocal
+	case l.HTTP != nil:
+		return SourceBackendTypeHTTP
+	default:
+		return SourceBackendTypeUnknown
+	}
+}
+
+func (l Location) ValidateTypedUnion() error {
+	switch count := l.backendCount(); {
+	case count == 0:
+		return fmt.Errorf("location must declare exactly one backend payload")
+	case count > 1:
+		return fmt.Errorf("location must not mix multiple backend payloads")
+	default:
+		return nil
+	}
+}
+
+func (l Location) backendCount() int {
+	count := 0
+	if l.NodeLocal != nil {
+		count++
+	}
+	if l.HTTP != nil {
+		count++
+	}
+	return count
+}
+
+func ValidateArtifactSource(source ArtifactSource) error {
+	if strings.TrimSpace(source.SourceID) == "" {
+		return fmt.Errorf("sourceID is required")
+	}
+	if strings.TrimSpace(source.ArtifactID) == "" {
+		return fmt.Errorf("artifactID is required")
+	}
+	if strings.TrimSpace(source.BackendID) == "" {
+		return fmt.Errorf("backendID is required")
+	}
+	if err := source.Location.ValidateTypedUnion(); err != nil {
+		return err
+	}
+	expected := BackendTypeForID(source.BackendID)
+	if expected == SourceBackendTypeUnknown {
+		return fmt.Errorf("unknown backendID %q", source.BackendID)
+	}
+	if actual := source.Location.BackendType(); actual != expected {
+		return fmt.Errorf("backend %q expects %s location, got %s", source.BackendID, expected, actual)
+	}
+	return nil
+}
+
+func ValidateArtifactSourceForArtifact(artifact Artifact, source ArtifactSource) error {
+	if err := ValidateArtifactSource(source); err != nil {
+		return err
+	}
+	if artifact.ArtifactID != "" && source.ArtifactID != artifact.ArtifactID {
+		return fmt.Errorf("source artifactID %q does not match artifactID %q", source.ArtifactID, artifact.ArtifactID)
+	}
+	if strings.TrimSpace(source.Digest) == "" || strings.TrimSpace(artifact.Digest) == "" {
+		return nil
+	}
+	if source.Digest != artifact.Digest {
+		return fmt.Errorf("source digest %q does not match artifact digest %q", source.Digest, artifact.Digest)
+	}
+	return nil
 }
 
 func SourceID(artifactID, backendID, fingerprint string) string {
