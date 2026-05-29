@@ -3,6 +3,9 @@ package resolver
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
+	"os"
 	"path"
 	"strings"
 	"time"
@@ -18,6 +21,7 @@ type Service struct {
 	metrics               *metrics.Metrics
 	minRetention          time.Duration
 	retentionPolicySource string
+	httpAllowedHosts      map[string]struct{}
 }
 
 func NewService(store inventory.Store) (*Service, error) {
@@ -31,6 +35,7 @@ func NewService(store inventory.Store) (*Service, error) {
 		metrics:               m,
 		minRetention:          15 * time.Minute,
 		retentionPolicySource: "service_default",
+		httpAllowedHosts:      parseAllowedHTTPHosts(os.Getenv("AH_ALLOWED_HTTP_SOURCE_HOSTS")),
 	}, nil
 }
 
@@ -156,7 +161,18 @@ func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]dom
 	if artifactID == "" {
 		return nil, fmt.Errorf("artifactID is required")
 	}
-	return s.store.ListArtifactSources(ctx, artifactID)
+	sources, err := s.store.ListArtifactSources(ctx, artifactID)
+	if err != nil {
+		return nil, err
+	}
+	filtered := sources[:0]
+	for _, source := range sources {
+		if source.State == domain.SourceStateDeleted {
+			continue
+		}
+		filtered = append(filtered, source)
+	}
+	return filtered, nil
 }
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
@@ -269,7 +285,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		return domain.ResolvedHandoff{}, err
 	}
 	sources = effectiveArtifactSources(artifact, sources, s.now())
-	candidateSources := candidateEligibleArtifactSources(artifact, sources)
+	candidateSources := s.candidateEligibleArtifactSources(artifact, sources)
 	nodeLocalSource := firstReadyNodeLocalSource(candidateSources)
 	remoteSource := firstReadyHTTPSource(candidateSources)
 	expectedDigest := artifact.Digest
@@ -300,6 +316,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Mode:           domain.MaterializationModeLocalReuse,
 			SourceRef:      source.SourceID,
 			ExpectedDigest: expectedDigest,
+			ExpectedSize:   artifact.SizeBytes,
 			LocalPath:      localPath,
 			SourceLocation: &source.Location,
 			Conditions:     conditions,
@@ -326,6 +343,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Mode:           domain.MaterializationModeRemoteFetch,
 			SourceRef:      source.SourceID,
 			ExpectedDigest: expectedDigest,
+			ExpectedSize:   artifact.SizeBytes,
 			LocalPath:      localPath,
 			SourceLocation: &source.Location,
 			URI:            uri,
@@ -337,6 +355,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Mode:           candidate.Mode,
 			URI:            candidate.URI,
 			ExpectedDigest: candidate.ExpectedDigest,
+			ExpectedSize:   candidate.ExpectedSize,
 			SourceLocation: candidate.SourceLocation,
 			LocalPath:      candidate.LocalPath,
 		}
@@ -609,7 +628,7 @@ func effectiveArtifactSources(artifact domain.Artifact, sources []domain.Artifac
 	return initialSourcesForArtifact(artifact, now)
 }
 
-func candidateEligibleArtifactSources(artifact domain.Artifact, sources []domain.ArtifactSource) []domain.ArtifactSource {
+func (s *Service) candidateEligibleArtifactSources(artifact domain.Artifact, sources []domain.ArtifactSource) []domain.ArtifactSource {
 	filtered := make([]domain.ArtifactSource, 0, len(sources))
 	for _, source := range sources {
 		if source.State != domain.SourceStateReady {
@@ -618,9 +637,61 @@ func candidateEligibleArtifactSources(artifact domain.Artifact, sources []domain
 		if err := domain.ValidateArtifactSourceForArtifact(artifact, source); err != nil {
 			continue
 		}
+		if err := validateCandidateSource(source, s.httpAllowedHosts); err != nil {
+			continue
+		}
 		filtered = append(filtered, source)
 	}
 	return filtered
+}
+
+func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[string]struct{}) error {
+	if source.Location.HTTP == nil {
+		return nil
+	}
+	parsed, err := url.Parse(source.Location.HTTP.URI)
+	if err != nil {
+		return fmt.Errorf("invalid http source uri: %w", err)
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf("unsupported http source scheme %q", parsed.Scheme)
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" {
+		return fmt.Errorf("http source host is required")
+	}
+	if len(allowedHosts) != 0 {
+		if _, ok := allowedHosts[strings.ToLower(host)]; !ok {
+			return fmt.Errorf("http source host %q is not in allowlist", host)
+		}
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+			return fmt.Errorf("http source host %q is not allowed", host)
+		}
+	}
+	return nil
+}
+
+func parseAllowedHTTPHosts(raw string) map[string]struct{} {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	out := make(map[string]struct{})
+	for _, part := range strings.Split(raw, ",") {
+		host := strings.ToLower(strings.TrimSpace(part))
+		if host == "" {
+			continue
+		}
+		out[host] = struct{}{}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func firstReadyNodeLocalSource(sources []domain.ArtifactSource) *domain.ArtifactSource {

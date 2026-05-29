@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -269,6 +270,11 @@ func ValidateArtifactSource(source ArtifactSource) error {
 	if actual := source.Location.BackendType(); actual != expected {
 		return fmt.Errorf("backend %q expects %s location, got %s", source.BackendID, expected, actual)
 	}
+	if source.Location.HTTP != nil {
+		if err := validateHTTPSource(*source.Location.HTTP); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -284,6 +290,28 @@ func ValidateArtifactSourceForArtifact(artifact Artifact, source ArtifactSource)
 	}
 	if source.Digest != artifact.Digest {
 		return fmt.Errorf("source digest %q does not match artifact digest %q", source.Digest, artifact.Digest)
+	}
+	return nil
+}
+
+func validateHTTPSource(source HTTPSource) error {
+	if strings.TrimSpace(source.URI) == "" {
+		return fmt.Errorf("http source uri is required")
+	}
+	if len(source.Headers) != 0 {
+		return fmt.Errorf("http source headers must be empty; credential embedding is not allowed")
+	}
+	parsed, err := url.Parse(source.URI)
+	if err != nil {
+		return fmt.Errorf("invalid http source uri: %w", err)
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf("unsupported http source scheme %q", parsed.Scheme)
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return fmt.Errorf("http source host is required")
 	}
 	return nil
 }
@@ -308,6 +336,7 @@ type MaterializationPlan struct {
 	Mode           MaterializationMode `json:"mode"`
 	URI            string              `json:"uri,omitempty"`
 	ExpectedDigest string              `json:"expectedDigest,omitempty"`
+	ExpectedSize   int64               `json:"expectedSizeBytes,omitempty"`
 	SourceLocation *Location           `json:"sourceLocation,omitempty"`
 	LocalPath      string              `json:"localPath,omitempty"`
 }
@@ -325,6 +354,7 @@ type MaterializationCandidate struct {
 	Mode           MaterializationMode        `json:"mode"`
 	SourceRef      string                     `json:"sourceRef,omitempty"`
 	ExpectedDigest string                     `json:"expectedDigest,omitempty"`
+	ExpectedSize   int64                      `json:"expectedSizeBytes,omitempty"`
 	LocalPath      string                     `json:"localPath,omitempty"`
 	SourceLocation *Location                  `json:"sourceLocation,omitempty"`
 	URI            string                     `json:"uri,omitempty"`

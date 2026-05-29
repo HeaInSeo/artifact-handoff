@@ -217,6 +217,48 @@ func TestRegisterArtifactCreatesInitialSources(t *testing.T) {
 	}
 }
 
+func TestListSourcesExcludesDeletedByDefault(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-sources/producer-a/attempt-1/dataset"
+
+	if err := store.PutArtifactSources(context.Background(), artifactID, []domain.ArtifactSource{
+		{
+			SourceID:   "src-ready",
+			ArtifactID: artifactID,
+			BackendID:  "legacy-http",
+			Digest:     "sha256:abc123",
+			State:      domain.SourceStateReady,
+			Location: domain.Location{
+				HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/abc123"},
+			},
+		},
+		{
+			SourceID:   "src-deleted",
+			ArtifactID: artifactID,
+			BackendID:  "legacy-http",
+			Digest:     "sha256:abc123",
+			State:      domain.SourceStateDeleted,
+			Location: domain.Location{
+				HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/old"},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("put artifact sources: %v", err)
+	}
+
+	sources, err := service.ListSources(context.Background(), artifactID)
+	if err != nil {
+		t.Fatalf("list sources: %v", err)
+	}
+	if len(sources) != 1 {
+		t.Fatalf("len(sources) = %d, want 1", len(sources))
+	}
+	if sources[0].SourceID != "src-ready" {
+		t.Fatalf("sources[0].SourceID = %q, want src-ready", sources[0].SourceID)
+	}
+}
+
 func TestResolveHandoffRemoteFetch(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -502,7 +544,7 @@ func TestResolvePlanningMode_SameNodeThenRemote_FallsBackToRemoteWhenNoNodeName(
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		Digest:            "sha256:nonode2",
-		URI:               "jumi://runs/run-nonode2/nodes/node-a/outputs/output",
+		URI:               "http://artifact-source.local/artifacts/nonode2",
 		// NodeName intentionally empty
 	}); err != nil {
 		t.Fatalf("register: %v", err)
@@ -657,7 +699,7 @@ func TestResolveHandoffPlanningMode_SameNodeThenRemote(t *testing.T) {
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
 		Digest:            "sha256:plan2",
-		URI:               "jumi://runs/run-plan2/nodes/node-a/outputs/output",
+		URI:               "http://artifact-source.local/artifacts/plan2",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -1016,7 +1058,7 @@ func TestResolveHandoffPlanningMode_RemoteOK(t *testing.T) {
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
 		Digest:            "sha256:plan3",
-		URI:               "jumi://runs/run-plan3/nodes/node-a/outputs/output",
+		URI:               "http://artifact-source.local/artifacts/plan3",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -1757,6 +1799,42 @@ func TestHTTPListSources(t *testing.T) {
 	}
 }
 
+func TestResolveHandoffPlanningMode_IgnoresHTTPSourceOutsideAllowlist(t *testing.T) {
+	t.Setenv("AH_ALLOWED_HTTP_SOURCE_HOSTS", "artifact-source.local")
+
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-planning",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        "sample-planning/producer-a/attempt-1/dataset",
+		Digest:            "sha256:abc123",
+		URI:               "http://disallowed.example/artifacts/abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		SampleRunID:        "sample-planning",
+		BindingName:        "dataset",
+		ChildNodeID:        "consumer-a",
+		ProducerNodeID:     "producer-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+		Required:           true,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve handoff: %v", err)
+	}
+	if len(resolved.MaterializationCandidates) != 0 {
+		t.Fatalf("materializationCandidates = %#v, want no candidates for disallowed host", resolved.MaterializationCandidates)
+	}
+}
+
 func TestHTTPResolveHandoff(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -1769,7 +1847,7 @@ func TestHTTPResolveHandoff(t *testing.T) {
 		"outputName":"output",
 		"nodeName":"node-a",
 		"digest":"sha256:sample-resolve",
-		"uri":"jumi://runs/sample-resolve/nodes/node-a/outputs/output",
+		"uri":"http://artifact-source.local/artifacts/sample-resolve",
 		"sizeBytes":2048
 	}`))
 	registerReq.Header.Set("Content-Type", "application/json")
