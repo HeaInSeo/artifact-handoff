@@ -254,6 +254,54 @@ func TestRegisterArtifactRejectsHTTPHeadersAndDoesNotPersist(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactRejectsCredentialBearingHTTPURI(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-http-userinfo",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		Digest:            "sha256:abc123",
+		Locations: []domain.Location{{
+			HTTP: &domain.HTTPSource{URI: "https://user:pass@artifact-source.local/artifacts/abc123"},
+		}},
+	})
+	if err == nil {
+		t.Fatal("expected credential-bearing userinfo URI to be rejected")
+	}
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-http-userinfo", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite registration rejection")
+	}
+}
+
+func TestRegisterArtifactRejectsCredentialBearingHTTPQuery(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-http-query",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		Digest:            "sha256:abc123",
+		Locations: []domain.Location{{
+			HTTP: &domain.HTTPSource{URI: "https://artifact-source.local/artifacts/abc123?token=secret"},
+		}},
+	})
+	if err == nil {
+		t.Fatal("expected credential-bearing query URI to be rejected")
+	}
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-http-query", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite registration rejection")
+	}
+}
+
 func TestListSourcesExcludesDeletedByDefault(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -693,7 +741,12 @@ func TestResolveHandoffPlanningMode_SameNodeOnly(t *testing.T) {
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
 		Digest:            "sha256:plan1",
-		URI:               "jumi://runs/run-plan/nodes/node-a/outputs/output",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: "k8s-node-1",
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/plan1",
+			},
+		}},
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -726,6 +779,43 @@ func TestResolveHandoffPlanningMode_SameNodeOnly(t *testing.T) {
 	}
 }
 
+func TestResolveHandoffPlanningMode_DoesNotUseLogicalURIAsLocalReuseSource(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-logical-only",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		Digest:            "sha256:plan-logical",
+		URI:               "jumi://runs/run-plan-logical-only/nodes/node-a/outputs/output",
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-logical-only",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeOnly,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusUnavailable {
+		t.Fatalf("status = %q, want UNAVAILABLE", resolved.Status)
+	}
+	if resolved.MaterializationPlan.Mode != domain.MaterializationModeNone {
+		t.Fatalf("materializationPlan.mode = %q, want none", resolved.MaterializationPlan.Mode)
+	}
+	if len(resolved.MaterializationCandidates) != 0 {
+		t.Fatalf("materializationCandidates = %#v, want none", resolved.MaterializationCandidates)
+	}
+}
+
 func TestResolveHandoffPlanningMode_SameNodeThenRemote(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -755,25 +845,17 @@ func TestResolveHandoffPlanningMode_SameNodeThenRemote(t *testing.T) {
 	if resolved.Status != domain.ResolutionStatusResolved {
 		t.Fatalf("status = %q, want RESOLVED", resolved.Status)
 	}
-	// PreferredNode hint must be present so Spawner can request the producer node.
-	if resolved.PlacementIntent.Mode != domain.PlacementIntentModePreferredNode {
-		t.Fatalf("placementIntent.mode = %q, want preferred_node", resolved.PlacementIntent.Mode)
+	if resolved.PlacementIntent.Mode != domain.PlacementIntentModeNone {
+		t.Fatalf("placementIntent.mode = %q, want none without node-local source", resolved.PlacementIntent.Mode)
 	}
-	if resolved.PlacementIntent.NodeName != "k8s-node-1" {
-		t.Fatalf("placementIntent.nodeName = %q, want k8s-node-1", resolved.PlacementIntent.NodeName)
-	}
-	// MaterializationPlan is remote_fetch as fallback for when scheduling lands elsewhere.
 	if resolved.MaterializationPlan.Mode != domain.MaterializationModeRemoteFetch {
 		t.Fatalf("materializationPlan.mode = %q, want remote_fetch", resolved.MaterializationPlan.Mode)
 	}
-	if len(resolved.MaterializationCandidates) != 2 {
-		t.Fatalf("materializationCandidates len = %d, want 2", len(resolved.MaterializationCandidates))
+	if len(resolved.MaterializationCandidates) != 1 {
+		t.Fatalf("materializationCandidates len = %d, want 1", len(resolved.MaterializationCandidates))
 	}
-	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeLocalReuse {
-		t.Fatalf("materializationCandidates[0].mode = %q, want local_reuse", resolved.MaterializationCandidates[0].Mode)
-	}
-	if resolved.MaterializationCandidates[1].Mode != domain.MaterializationModeRemoteFetch {
-		t.Fatalf("materializationCandidates[1].mode = %q, want remote_fetch", resolved.MaterializationCandidates[1].Mode)
+	if resolved.MaterializationCandidates[0].Mode != domain.MaterializationModeRemoteFetch {
+		t.Fatalf("materializationCandidates[0].mode = %q, want remote_fetch", resolved.MaterializationCandidates[0].Mode)
 	}
 }
 

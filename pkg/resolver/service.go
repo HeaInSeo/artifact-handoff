@@ -369,29 +369,10 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	if nodeLocalSource != nil && nodeLocalSource.Location.NodeLocal != nil && nodeLocalSource.Location.NodeLocal.NodeName != "" {
 		producerNodeName = nodeLocalSource.Location.NodeLocal.NodeName
 	}
-	anyNodeLocalSource := hasAnyNodeLocalSource(sources)
 	localCandidates := []domain.MaterializationCandidate{}
 	if nodeLocalSource != nil {
 		if candidate, ok := localCandidate(*nodeLocalSource, targetNodeName == ""); ok {
 			localCandidates = append(localCandidates, candidate)
-		}
-	} else if !anyNodeLocalSource && producerNodeName != "" && artifact.URI != "" {
-		if strings.TrimSpace(expectedDigest) != "" {
-			conditions := []domain.MaterializationCondition{}
-			if targetNodeName == "" {
-				conditions = append(conditions, domain.MaterializationCondition{
-					Kind:     "scheduled_on_node",
-					NodeName: producerNodeName,
-				})
-			}
-			localCandidates = append(localCandidates, domain.MaterializationCandidate{
-				Priority:       1,
-				Mode:           domain.MaterializationModeLocalReuse,
-				ExpectedDigest: expectedDigest,
-				LocalPath:      localPath,
-				URI:            artifact.URI,
-				Conditions:     conditions,
-			})
 		}
 	}
 	remoteCandidates := []domain.MaterializationCandidate{}
@@ -666,9 +647,15 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 	default:
 		return fmt.Errorf("unsupported http source scheme %q", parsed.Scheme)
 	}
+	if parsed.User != nil {
+		return fmt.Errorf("http source uri must not contain userinfo")
+	}
 	host := strings.TrimSpace(parsed.Hostname())
 	if host == "" {
 		return fmt.Errorf("http source host is required")
+	}
+	if domainQuery := parsed.Query(); domainQuery != nil && domain.HasCredentialBearingQuery(domainQuery) {
+		return fmt.Errorf("http source uri must not contain credential-bearing query parameters")
 	}
 	if len(allowedHosts) == 0 && !allowAny {
 		return fmt.Errorf("http source allowlist is required")

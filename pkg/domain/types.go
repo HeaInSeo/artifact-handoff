@@ -334,10 +334,26 @@ func validateHTTPSource(source HTTPSource) error {
 	default:
 		return fmt.Errorf("unsupported http source scheme %q", parsed.Scheme)
 	}
+	if parsed.User != nil {
+		return fmt.Errorf("http source uri must not contain userinfo")
+	}
 	if strings.TrimSpace(parsed.Host) == "" {
 		return fmt.Errorf("http source host is required")
 	}
+	if HasCredentialBearingQuery(parsed.Query()) {
+		return fmt.Errorf("http source uri must not contain credential-bearing query parameters")
+	}
 	return nil
+}
+
+func HasCredentialBearingQuery(values url.Values) bool {
+	for key := range values {
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "access_token", "token", "sig", "signature", "x-amz-signature", "x-amz-credential", "x-goog-signature", "x-goog-credential", "awsaccesskeyid":
+			return true
+		}
+	}
+	return false
 }
 
 func SourceID(artifactID, backendID, fingerprint string) string {

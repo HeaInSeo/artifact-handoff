@@ -63,6 +63,12 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 		NodeName:          nodeWorker1,
 		URI:               "http://artifact-source.local/" + simRun + "/A/output-a",
 		Digest:            "sha256:aaa",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: nodeWorker1,
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/aaa",
+			},
+		}},
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
@@ -94,8 +100,8 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 	if bResolved.MaterializationPlan.Mode != domain.MaterializationModeLocalReuse {
 		t.Fatalf("B MaterializationPlan.Mode = %s, want local_reuse", bResolved.MaterializationPlan.Mode)
 	}
-	if bResolved.MaterializationPlan.URI == "" {
-		t.Fatal("B MaterializationPlan.URI must not be empty")
+	if bResolved.MaterializationPlan.SourceLocation == nil || bResolved.MaterializationPlan.SourceLocation.NodeLocal == nil {
+		t.Fatalf("B sourceLocation = %#v, want nodeLocal source", bResolved.MaterializationPlan.SourceLocation)
 	}
 	if bResolved.Retryable {
 		t.Fatal("B local_reuse must not be retryable")
@@ -108,8 +114,13 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-b",
 		NodeName:          nodeWorker1,
-		URI:               "node-local://" + nodeWorker1 + "/" + simRun + "/B/output-b",
 		Digest:            "sha256:bbb",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: nodeWorker1,
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/bbb",
+			},
+		}},
 	})
 	notifyTerminal(t, svc, simRun, "node-B", simAttempt, "Succeeded")
 
