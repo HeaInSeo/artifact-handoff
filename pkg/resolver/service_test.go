@@ -226,6 +226,7 @@ func TestResolveHandoffRemoteFetch(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
 		NodeName:          "node-a",
+		Digest:            "sha256:dataset",
 		URI:               "http://artifact.local/dataset",
 	})
 	if err != nil {
@@ -500,6 +501,7 @@ func TestResolvePlanningMode_SameNodeThenRemote_FallsBackToRemoteWhenNoNodeName(
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
+		Digest:            "sha256:nonode2",
 		URI:               "jumi://runs/run-nonode2/nodes/node-a/outputs/output",
 		// NodeName intentionally empty
 	}); err != nil {
@@ -611,6 +613,7 @@ func TestResolveHandoffPlanningMode_SameNodeOnly(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
+		Digest:            "sha256:plan1",
 		URI:               "jumi://runs/run-plan/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
@@ -653,6 +656,7 @@ func TestResolveHandoffPlanningMode_SameNodeThenRemote(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
+		Digest:            "sha256:plan2",
 		URI:               "jumi://runs/run-plan2/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
@@ -703,6 +707,7 @@ func TestResolveHandoffPlanningMode_NodeLocalAndHTTPCreatesOrderedCandidates(t *
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
+		Digest:            "sha256:abc123",
 		URI:               "http://artifact-source.local/artifacts/abc123",
 		Locations: []domain.Location{{
 			NodeLocal: &domain.NodeLocalLocation{
@@ -752,6 +757,7 @@ func TestResolveHandoffPlanningMode_NodeLocalOnlySameNodeThenRemoteRequiresPlace
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
+		Digest:            "sha256:localonly",
 		Locations: []domain.Location{{
 			NodeLocal: &domain.NodeLocalLocation{
 				NodeName: "k8s-node-1",
@@ -793,6 +799,7 @@ func TestResolveHandoffPlanningMode_IgnoresUnreachableNodeLocalSource(t *testing
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
+		Digest:            "sha256:abc123",
 		URI:               "http://artifact-source.local/artifacts/abc123",
 		Locations: []domain.Location{{
 			NodeLocal: &domain.NodeLocalLocation{
@@ -960,6 +967,45 @@ func TestResolveHandoffPlanningMode_IgnoresDigestMismatchedNodeLocalSource(t *te
 	}
 }
 
+func TestResolveHandoffPlanningMode_RejectsCandidatesWithoutExpectedDigest(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "run-plan-no-digest",
+		ProducerNodeID:    "node-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "output",
+		NodeName:          "k8s-node-1",
+		URI:               "http://artifact-source.local/artifacts/abc123",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: "k8s-node-1",
+				Path:     "/var/lib/jumi-artifacts/cas/sha256/abc123",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	resolved, err := service.ResolveHandoff(context.Background(), domain.Binding{
+		BindingName:        "input",
+		SampleRunID:        "run-plan-no-digest",
+		ProducerNodeID:     "node-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "output",
+		ConsumePolicy:      domain.ConsumePolicySameNodeThenRemote,
+	}, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if resolved.Status != domain.ResolutionStatusUnavailable {
+		t.Fatalf("status = %q, want UNAVAILABLE", resolved.Status)
+	}
+	if len(resolved.MaterializationCandidates) != 0 {
+		t.Fatalf("materializationCandidates = %#v, want none", resolved.MaterializationCandidates)
+	}
+}
+
 func TestResolveHandoffPlanningMode_RemoteOK(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -969,6 +1015,7 @@ func TestResolveHandoffPlanningMode_RemoteOK(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
+		Digest:            "sha256:plan3",
 		URI:               "jumi://runs/run-plan3/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
@@ -1721,6 +1768,7 @@ func TestHTTPResolveHandoff(t *testing.T) {
 		"producerAttemptId":"attempt-1",
 		"outputName":"output",
 		"nodeName":"node-a",
+		"digest":"sha256:sample-resolve",
 		"uri":"jumi://runs/sample-resolve/nodes/node-a/outputs/output",
 		"sizeBytes":2048
 	}`))
@@ -1795,6 +1843,7 @@ func TestHTTPResolveHandoff_LocalReuse(t *testing.T) {
 		"producerAttemptId":"attempt-1",
 		"outputName":"output",
 		"nodeName":"node-a",
+		"digest":"sha256:sample-local",
 		"logicalUri":"jumi://runs/sample-local/nodes/node-a/outputs/output",
 		"locations":[{"nodeLocal":{"nodeName":"node-a","path":"/var/lib/jumi-artifacts/cas/sha256/local"}}],
 		"sizeBytes":1024

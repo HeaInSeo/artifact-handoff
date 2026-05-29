@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
@@ -279,7 +280,10 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	if binding.ChildInputName != "" {
 		localPath = path.Join("inputs", binding.ChildInputName)
 	}
-	localCandidate := func(source domain.ArtifactSource, includeScheduledCondition bool) domain.MaterializationCandidate {
+	localCandidate := func(source domain.ArtifactSource, includeScheduledCondition bool) (domain.MaterializationCandidate, bool) {
+		if strings.TrimSpace(expectedDigest) == "" {
+			return domain.MaterializationCandidate{}, false
+		}
 		conditions := []domain.MaterializationCondition{{
 			Kind:      "source_state_ready",
 			SourceRef: source.SourceID,
@@ -299,9 +303,12 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			LocalPath:      localPath,
 			SourceLocation: &source.Location,
 			Conditions:     conditions,
-		}
+		}, true
 	}
-	remoteCandidate := func(source domain.ArtifactSource, priority int) domain.MaterializationCandidate {
+	remoteCandidate := func(source domain.ArtifactSource, priority int) (domain.MaterializationCandidate, bool) {
+		if strings.TrimSpace(expectedDigest) == "" {
+			return domain.MaterializationCandidate{}, false
+		}
 		conditions := []domain.MaterializationCondition{{
 			Kind:      "source_state_ready",
 			SourceRef: source.SourceID,
@@ -323,7 +330,7 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			SourceLocation: &source.Location,
 			URI:            uri,
 			Conditions:     conditions,
-		}
+		}, true
 	}
 	legacyPlanFromCandidate := func(candidate domain.MaterializationCandidate) domain.MaterializationPlan {
 		return domain.MaterializationPlan{
@@ -341,23 +348,27 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	anyNodeLocalSource := hasAnyNodeLocalSource(sources)
 	localCandidates := []domain.MaterializationCandidate{}
 	if nodeLocalSource != nil {
-		localCandidates = append(localCandidates, localCandidate(*nodeLocalSource, targetNodeName == ""))
+		if candidate, ok := localCandidate(*nodeLocalSource, targetNodeName == ""); ok {
+			localCandidates = append(localCandidates, candidate)
+		}
 	} else if !anyNodeLocalSource && producerNodeName != "" && artifact.URI != "" {
-		conditions := []domain.MaterializationCondition{}
-		if targetNodeName == "" {
-			conditions = append(conditions, domain.MaterializationCondition{
-				Kind:     "scheduled_on_node",
-				NodeName: producerNodeName,
+		if strings.TrimSpace(expectedDigest) != "" {
+			conditions := []domain.MaterializationCondition{}
+			if targetNodeName == "" {
+				conditions = append(conditions, domain.MaterializationCondition{
+					Kind:     "scheduled_on_node",
+					NodeName: producerNodeName,
+				})
+			}
+			localCandidates = append(localCandidates, domain.MaterializationCandidate{
+				Priority:       1,
+				Mode:           domain.MaterializationModeLocalReuse,
+				ExpectedDigest: expectedDigest,
+				LocalPath:      localPath,
+				URI:            artifact.URI,
+				Conditions:     conditions,
 			})
 		}
-		localCandidates = append(localCandidates, domain.MaterializationCandidate{
-			Priority:       1,
-			Mode:           domain.MaterializationModeLocalReuse,
-			ExpectedDigest: expectedDigest,
-			LocalPath:      localPath,
-			URI:            artifact.URI,
-			Conditions:     conditions,
-		})
 	}
 	remoteCandidates := []domain.MaterializationCandidate{}
 	if remoteSource != nil {
@@ -365,7 +376,9 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		if len(localCandidates) > 0 {
 			priority = 2
 		}
-		remoteCandidates = append(remoteCandidates, remoteCandidate(*remoteSource, priority))
+		if candidate, ok := remoteCandidate(*remoteSource, priority); ok {
+			remoteCandidates = append(remoteCandidates, candidate)
+		}
 	}
 
 	// targetNodeName is known → post-scheduling check.

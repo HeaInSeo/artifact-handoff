@@ -109,6 +109,7 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 		OutputName:        "output-b",
 		NodeName:          nodeWorker1,
 		URI:               "node-local://" + nodeWorker1 + "/" + simRun + "/B/output-b",
+		Digest:            "sha256:bbb",
 	})
 	notifyTerminal(t, svc, simRun, "node-B", simAttempt, "Succeeded")
 
@@ -147,6 +148,7 @@ func TestSimulateLinearABC_RemoteFetch(t *testing.T) {
 		OutputName:        "output-a",
 		NodeName:          nodeWorker1,
 		URI:               "node-local://" + nodeWorker1 + "/" + simRun + "/A/output-a",
+		Digest:            "sha256:aaa",
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
@@ -181,6 +183,7 @@ func TestSimulateLinearABC_RemoteFetch(t *testing.T) {
 		OutputName:        "output-b",
 		NodeName:          nodeWorker2,
 		URI:               "node-local://" + nodeWorker2 + "/" + simRun + "/B/output-b",
+		Digest:            "sha256:bbb",
 	})
 	notifyTerminal(t, svc, simRun, "node-B", simAttempt, "Succeeded")
 
@@ -237,6 +240,7 @@ func TestSimulateProducerPending(t *testing.T) {
 		OutputName:        "output-a",
 		NodeName:          nodeWorker1,
 		URI:               "node-local://" + nodeWorker1 + "/" + simRun + "/A/output-a",
+		Digest:            "sha256:aaa",
 	})
 
 	// B retries and now gets RESOLVED.

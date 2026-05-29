@@ -45,6 +45,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 			ProducerAttemptId: "attempt-1",
 			OutputName:        "output",
 			NodeName:          "node-a",
+			Digest:            "sha256:grpc-output",
 			Uri:               "http://artifact.local/output",
 			SizeBytes:         4096,
 		},
