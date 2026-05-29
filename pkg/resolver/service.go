@@ -120,25 +120,27 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	if err := s.store.PutArtifact(ctx, artifact); err != nil {
 		return "", err
 	}
-	if err := s.store.PutArtifactSources(ctx, artifact.ArtifactID, initialSourcesForArtifact(artifact, s.now())); err != nil {
+	initialSources := initialSourcesForArtifact(artifact, s.now())
+	if err := s.store.PutArtifactSources(ctx, artifact.ArtifactID, initialSources); err != nil {
 		return "", err
 	}
 	s.metrics.IncArtifactsRegistered()
 	hasNodeLocal := false
-	for _, loc := range artifact.Locations {
-		if loc.NodeLocal != nil && loc.NodeLocal.Path != "" {
+	hasHTTP := false
+	for _, source := range initialSources {
+		switch {
+		case source.Location.NodeLocal != nil && strings.TrimSpace(source.Location.NodeLocal.Path) != "":
 			hasNodeLocal = true
-			break
+		case source.Location.HTTP != nil && strings.TrimSpace(source.Location.HTTP.URI) != "":
+			hasHTTP = true
 		}
 	}
 	switch {
-	case artifact.NodeName != "" && artifact.URI != "":
+	case hasNodeLocal && hasHTTP:
 		return domain.AvailabilityStateBoth, nil
-	case hasNodeLocal && artifact.URI != "":
-		return domain.AvailabilityStateBoth, nil
-	case hasNodeLocal || artifact.NodeName != "":
+	case hasNodeLocal:
 		return domain.AvailabilityStateLocalOnly, nil
-	case artifact.URI != "":
+	case hasHTTP:
 		return domain.AvailabilityStateRemoteOnly, nil
 	default:
 		return domain.AvailabilityStateUnavailable, nil
@@ -654,8 +656,8 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 	if host == "" {
 		return fmt.Errorf("http source host is required")
 	}
-	if domainQuery := parsed.Query(); domainQuery != nil && domain.HasCredentialBearingQuery(domainQuery) {
-		return fmt.Errorf("http source uri must not contain credential-bearing query parameters")
+	if parsed.RawQuery != "" {
+		return fmt.Errorf("http source uri must not contain query string")
 	}
 	if len(allowedHosts) == 0 && !allowAny {
 		return fmt.Errorf("http source allowlist is required")

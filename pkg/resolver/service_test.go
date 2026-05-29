@@ -50,8 +50,13 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
 		NodeName:          "node-a",
-		URI:               "jumi://runs/run-1/nodes/producer-a/outputs/dataset",
-		SizeBytes:         2048,
+		Digest:            "sha256:dataset",
+		URI:               "https://artifact-source.local/artifacts/dataset",
+		LogicalURI:        "jumi://runs/run-1/nodes/producer-a/outputs/dataset",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: "node-a", Path: "/var/lib/jumi-artifacts/cas/sha256/dataset"},
+		}},
+		SizeBytes: 2048,
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -66,8 +71,8 @@ func TestRegisterArtifactStoresArtifactAndReturnsAvailability(t *testing.T) {
 	if !ok {
 		t.Fatal("expected stored artifact")
 	}
-	if artifact.URI == "" {
-		t.Fatal("expected artifact URI to be stored")
+	if artifact.URI != "https://artifact-source.local/artifacts/dataset" {
+		t.Fatalf("artifact.URI = %q, want https remote source", artifact.URI)
 	}
 	if artifact.CreatedAt.IsZero() {
 		t.Fatal("expected CreatedAt to be filled")
@@ -160,6 +165,26 @@ func TestRegisterArtifactStoresLogicalURIAndLocations(t *testing.T) {
 	}
 	if len(artifact.Locations) != 1 || artifact.Locations[0].NodeLocal == nil {
 		t.Fatalf("locations = %#v, want one nodeLocal location", artifact.Locations)
+	}
+}
+
+func TestRegisterArtifactTreatsLogicalURIAsLogicalOnlyAvailability(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	state, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-logical-only",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		LogicalURI:        "jumi://runs/sample-logical-only/nodes/producer-a/outputs/dataset",
+		NodeName:          "node-a",
+	})
+	if err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	if state != domain.AvailabilityStateUnavailable {
+		t.Fatalf("availability state = %s, want %s", state, domain.AvailabilityStateUnavailable)
 	}
 }
 
@@ -278,7 +303,7 @@ func TestRegisterArtifactRejectsCredentialBearingHTTPURI(t *testing.T) {
 	}
 }
 
-func TestRegisterArtifactRejectsCredentialBearingHTTPQuery(t *testing.T) {
+func TestRegisterArtifactRejectsHTTPQuery(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 
@@ -289,16 +314,58 @@ func TestRegisterArtifactRejectsCredentialBearingHTTPQuery(t *testing.T) {
 		OutputName:        "dataset",
 		Digest:            "sha256:abc123",
 		Locations: []domain.Location{{
-			HTTP: &domain.HTTPSource{URI: "https://artifact-source.local/artifacts/abc123?token=secret"},
+			HTTP: &domain.HTTPSource{URI: "https://artifact-source.local/artifacts/abc123?v=1"},
 		}},
 	})
 	if err == nil {
-		t.Fatal("expected credential-bearing query URI to be rejected")
+		t.Fatal("expected HTTP query URI to be rejected")
 	}
 	if _, ok, err := store.GetArtifact(context.Background(), "sample-http-query", "producer-a", "attempt-1", "dataset"); err != nil {
 		t.Fatalf("get artifact: %v", err)
 	} else if ok {
 		t.Fatal("artifact was stored despite registration rejection")
+	}
+}
+
+func TestRegisterArtifactRejectsTopLevelCredentialBearingURIAndDoesNotPersist(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-top-uri-userinfo",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		URI:               "https://user:pass@artifact-source.local/artifacts/abc123",
+	})
+	if err == nil {
+		t.Fatal("expected top-level artifact URI with userinfo to be rejected")
+	}
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-top-uri-userinfo", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite top-level URI rejection")
+	}
+}
+
+func TestRegisterArtifactRejectsTopLevelURIWithAnyQueryAndDoesNotPersist(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-top-uri-query",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		URI:               "https://artifact-source.local/artifacts/abc123?download=true",
+	})
+	if err == nil {
+		t.Fatal("expected top-level artifact URI with query string to be rejected")
+	}
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-top-uri-query", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite top-level URI rejection")
 	}
 }
 
@@ -432,7 +499,8 @@ func TestRegisterArtifactRemoteOnlyWhenNoNodeName(t *testing.T) {
 		ProducerNodeID:    "producer-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
-		URI:               "s3://bucket/path/dataset",
+		Digest:            "sha256:dataset",
+		URI:               "https://artifact-source.local/dataset",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -451,7 +519,8 @@ func TestRegisterArtifactPopulatesCanonicalID(t *testing.T) {
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
-		URI:               "s3://bucket/output",
+		Digest:            "sha256:output",
+		URI:               "https://artifact-source.local/output",
 	})
 	if err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -476,7 +545,7 @@ func TestRegisterArtifactIdempotentForSameDigest(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		Digest:            "sha256:abc",
-		URI:               "jumi://runs/run-idem/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-idem/nodes/node-a/outputs/output",
 	}
 	if _, err := service.RegisterArtifact(context.Background(), artifact); err != nil {
 		t.Fatalf("first register: %v", err)
@@ -497,7 +566,7 @@ func TestRegisterArtifactRejectsDigestConflictForSameArtifactKey(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		Digest:            "sha256:original",
-		URI:               "jumi://runs/run-conflict/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-conflict/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
@@ -508,7 +577,7 @@ func TestRegisterArtifactRejectsDigestConflictForSameArtifactKey(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		Digest:            "sha256:tampered", // different digest, same key
-		URI:               "jumi://runs/run-conflict/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-conflict/nodes/node-a/outputs/output",
 	})
 	if err == nil {
 		t.Fatal("expected conflict error for re-registration with different digest, got nil")
@@ -525,7 +594,7 @@ func TestRegisterArtifactRejectsDigestClearingForSameArtifactKey(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		Digest:            "sha256:original",
-		URI:               "jumi://runs/run-clear/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-clear/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
@@ -536,7 +605,7 @@ func TestRegisterArtifactRejectsDigestClearingForSameArtifactKey(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		Digest:            "", // clearing the digest must be rejected
-		URI:               "jumi://runs/run-clear/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-clear/nodes/node-a/outputs/output",
 	})
 	if err == nil {
 		t.Fatal("expected error when clearing existing digest, got nil")
@@ -553,7 +622,7 @@ func TestRegisterArtifactRejectsNonCanonicalArtifactID(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		ArtifactID:        "run-1:node-a:output", // legacy colon format — rejected by service layer
-		URI:               "jumi://runs/run-1/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-1/nodes/node-a/outputs/output",
 	})
 	if err == nil {
 		t.Fatal("expected error for non-canonical ArtifactID, got nil")
@@ -569,7 +638,7 @@ func TestResolvePlanningMode_SameNodeOnly_MissingNodeName(t *testing.T) {
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
-		URI:               "jumi://runs/run-nonode/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-nonode/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -710,7 +779,7 @@ func TestResolveHandoffRejectsUnknownConsumePolicy(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
 		NodeName:          "node-a",
-		URI:               "s3://bucket/dataset",
+		URI:               "https://artifact-source.local/dataset",
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
 	}
@@ -789,7 +858,7 @@ func TestResolveHandoffPlanningMode_DoesNotUseLogicalURIAsLocalReuseSource(t *te
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
 		Digest:            "sha256:plan-logical",
-		URI:               "jumi://runs/run-plan-logical-only/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-plan-logical-only/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -1341,7 +1410,7 @@ func TestResolveHandoffPostScheduling_SameNodeOnly_Violation(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
 		NodeName:          "k8s-node-1",
-		URI:               "jumi://runs/run-post/nodes/node-a/outputs/output",
+		LogicalURI:        "jumi://runs/run-post/nodes/node-a/outputs/output",
 	}); err != nil {
 		t.Fatalf("register: %v", err)
 	}
@@ -1374,7 +1443,7 @@ func TestResolveHandoffDigestMismatch_ArtifactHasNoDigest(t *testing.T) {
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
 		NodeName:          "node-a",
-		URI:               "s3://bucket/dataset",
+		URI:               "https://artifact-source.local/dataset",
 		// Digest intentionally omitted
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -1815,6 +1884,7 @@ func TestHTTPRegisterArtifact(t *testing.T) {
 		"producerNodeID":"producer-a",
 		"producerAttemptId":"attempt-1",
 		"outputName":"result.json",
+		"digest":"sha256:http",
 		"logicalUri":"jumi://runs/sample-http/nodes/producer-a/outputs/result.json",
 		"nodeName":"node-a",
 		"locations":[{"nodeLocal":{"nodeName":"node-a","path":"/var/lib/jumi-artifacts/cas/sha256/http"}}]
@@ -1887,7 +1957,7 @@ func TestHTTPRegisterArtifactCanonicalizesLegacyArtifactID(t *testing.T) {
 			"outputName":"result.json",
 			"artifactId":"sample-http-legacy:producer-a:result.json",
 			"nodeName":"node-a",
-			"uri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
+			"logicalUri":"jumi://runs/run-http/nodes/producer-a/outputs/result.json"
 		}
 	}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -1921,7 +1991,7 @@ func TestHTTPGetArtifact(t *testing.T) {
 		ArtifactID:        "sample-http-get/producer-a/attempt-1/report",
 		Digest:            "sha256:abc123",
 		NodeName:          "node-a",
-		URI:               "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
+		LogicalURI:        "jumi://runs/run-http-get/nodes/producer-a/outputs/report",
 		SizeBytes:         4096,
 	}); err != nil {
 		t.Fatalf("register artifact: %v", err)
@@ -1973,7 +2043,7 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 			OutputName:        "report",
 			ArtifactID:        "sample-http-list/producer-a/attempt-1/report",
 			Digest:            "sha256:one",
-			URI:               "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
+			LogicalURI:        "jumi://runs/run-http-list/nodes/producer-a/outputs/report",
 			SizeBytes:         512,
 		},
 		{
@@ -1983,7 +2053,7 @@ func TestHTTPListArtifactsBySampleRun(t *testing.T) {
 			OutputName:        "metrics",
 			ArtifactID:        "sample-http-list/producer-b/attempt-1/metrics",
 			Digest:            "sha256:two",
-			URI:               "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
+			LogicalURI:        "jumi://runs/run-http-list/nodes/producer-b/outputs/metrics",
 			SizeBytes:         128,
 		},
 	} {

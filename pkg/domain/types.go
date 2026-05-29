@@ -100,6 +100,11 @@ type Artifact struct {
 }
 
 func ValidateArtifactForRegistration(artifact Artifact) error {
+	if strings.TrimSpace(artifact.URI) != "" {
+		if err := validateLegacyArtifactURI(artifact.URI); err != nil {
+			return err
+		}
+	}
 	for _, location := range artifact.Locations {
 		if err := ValidateArtifactLocation(location); err != nil {
 			return err
@@ -340,20 +345,32 @@ func validateHTTPSource(source HTTPSource) error {
 	if strings.TrimSpace(parsed.Host) == "" {
 		return fmt.Errorf("http source host is required")
 	}
-	if HasCredentialBearingQuery(parsed.Query()) {
-		return fmt.Errorf("http source uri must not contain credential-bearing query parameters")
+	if parsed.RawQuery != "" {
+		return fmt.Errorf("http source uri must not contain query string")
 	}
 	return nil
 }
 
-func HasCredentialBearingQuery(values url.Values) bool {
-	for key := range values {
-		switch strings.ToLower(strings.TrimSpace(key)) {
-		case "access_token", "token", "sig", "signature", "x-amz-signature", "x-amz-credential", "x-goog-signature", "x-goog-credential", "awsaccesskeyid":
-			return true
-		}
+func validateLegacyArtifactURI(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("invalid artifact uri: %w", err)
 	}
-	return false
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf("artifact uri must be fetchable http(s), got scheme %q", parsed.Scheme)
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("artifact uri must not contain userinfo")
+	}
+	if strings.TrimSpace(parsed.Host) == "" {
+		return fmt.Errorf("artifact uri host is required")
+	}
+	if parsed.RawQuery != "" {
+		return fmt.Errorf("artifact uri must not contain query string")
+	}
+	return nil
 }
 
 func SourceID(artifactID, backendID, fingerprint string) string {

@@ -314,8 +314,10 @@ func TestSimulateDigestMismatch(t *testing.T) {
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
 		NodeName:          nodeWorker1,
-		URI:               "node-local://" + nodeWorker1 + "/A/output-a",
 		Digest:            "sha256:real",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: nodeWorker1, Path: "/var/lib/jumi-artifacts/cas/sha256/real"},
+		}},
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
@@ -350,7 +352,10 @@ func TestSimulateSameNodeOnlyViolation(t *testing.T) {
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
 		NodeName:          nodeWorker1,
-		URI:               "node-local://" + nodeWorker1 + "/A/output-a",
+		Digest:            "sha256:same-node",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: nodeWorker1, Path: "/var/lib/jumi-artifacts/cas/sha256/same-node"},
+		}},
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
@@ -394,8 +399,11 @@ func TestSimulateGCExpiredRun(t *testing.T) {
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
 		NodeName:          nodeWorker1,
-		URI:               "node-local://" + nodeWorker1 + "/A/output-a",
-		SizeBytes:         1024,
+		Digest:            "sha256:gc-expired",
+		Locations: []domain.Location{{
+			NodeLocal: &domain.NodeLocalLocation{NodeName: nodeWorker1, Path: "/var/lib/jumi-artifacts/cas/sha256/gc-expired"},
+		}},
+		SizeBytes: 1024,
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
