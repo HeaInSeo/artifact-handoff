@@ -32,6 +32,8 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 		Digest:            artifact.GetDigest(),
 		NodeName:          artifact.GetNodeName(),
 		URI:               artifact.GetUri(),
+		LogicalURI:        artifact.GetLogicalUri(),
+		Locations:         grpcLocationsToDomain(artifact.GetLocations()),
 		SizeBytes:         artifact.GetSizeBytes(),
 	})
 	if err != nil {
@@ -73,9 +75,13 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 			Mode:           string(resolved.MaterializationPlan.Mode),
 			Uri:            resolved.MaterializationPlan.URI,
 			ExpectedDigest: resolved.MaterializationPlan.ExpectedDigest,
+			ExpectedSizeBytes: resolved.MaterializationPlan.ExpectedSize,
+			SourceLocation: grpcLocationFromDomain(resolved.MaterializationPlan.SourceLocation),
+			LocalPath:      resolved.MaterializationPlan.LocalPath,
 		},
-		Reason:    resolved.Reason,
-		Retryable: resolved.Retryable,
+		Reason:                    resolved.Reason,
+		Retryable:                 resolved.Retryable,
+		MaterializationCandidates: grpcCandidatesFromDomain(resolved.MaterializationCandidates),
 	}, nil
 }
 
@@ -140,4 +146,90 @@ func lifecycleToGRPC(lifecycle domain.SampleRunLifecycle) *ahv1.GetSampleRunLife
 		resp.GcEligibleAt = lifecycle.GCEligibleAt.UTC().Format(time.RFC3339Nano)
 	}
 	return resp
+}
+
+func grpcLocationsToDomain(locations []*ahv1.ArtifactLocation) []domain.Location {
+	if len(locations) == 0 {
+		return nil
+	}
+	out := make([]domain.Location, 0, len(locations))
+	for _, location := range locations {
+		if location == nil {
+			continue
+		}
+		var converted domain.Location
+		switch backend := location.GetBackend().(type) {
+		case *ahv1.ArtifactLocation_NodeLocal:
+			converted.NodeLocal = &domain.NodeLocalLocation{
+				NodeName: backend.NodeLocal.GetNodeName(),
+				Path:     backend.NodeLocal.GetPath(),
+			}
+		case *ahv1.ArtifactLocation_Http:
+			converted.HTTP = &domain.HTTPSource{
+				URI: backend.Http.GetUri(),
+			}
+		}
+		out = append(out, converted)
+	}
+	return out
+}
+
+func grpcLocationFromDomain(location *domain.Location) *ahv1.ArtifactLocation {
+	if location == nil {
+		return nil
+	}
+	switch {
+	case location.NodeLocal != nil:
+		return &ahv1.ArtifactLocation{
+			Backend: &ahv1.ArtifactLocation_NodeLocal{
+				NodeLocal: &ahv1.NodeLocalLocation{
+					NodeName: location.NodeLocal.NodeName,
+					Path:     location.NodeLocal.Path,
+				},
+			},
+		}
+	case location.HTTP != nil:
+		return &ahv1.ArtifactLocation{
+			Backend: &ahv1.ArtifactLocation_Http{
+				Http: &ahv1.HttpSource{
+					Uri: location.HTTP.URI,
+				},
+			},
+		}
+	default:
+		return nil
+	}
+}
+
+func grpcCandidatesFromDomain(candidates []domain.MaterializationCandidate) []*ahv1.MaterializationCandidate {
+	if len(candidates) == 0 {
+		return nil
+	}
+	out := make([]*ahv1.MaterializationCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		item := &ahv1.MaterializationCandidate{
+			Priority:          int32(candidate.Priority), //nolint:gosec
+			Mode:              string(candidate.Mode),
+			SourceRef:         candidate.SourceRef,
+			ExpectedDigest:    candidate.ExpectedDigest,
+			ExpectedSizeBytes: candidate.ExpectedSize,
+			LocalPath:         candidate.LocalPath,
+			SourceLocation:    grpcLocationFromDomain(candidate.SourceLocation),
+			Uri:               candidate.URI,
+		}
+		if len(candidate.Conditions) != 0 {
+			item.Conditions = make([]*ahv1.MaterializationCondition, 0, len(candidate.Conditions))
+			for _, condition := range candidate.Conditions {
+				item.Conditions = append(item.Conditions, &ahv1.MaterializationCondition{
+					Kind:      condition.Kind,
+					NodeName:  condition.NodeName,
+					BackendId: condition.BackendID,
+					SourceRef: condition.SourceRef,
+					State:     condition.State,
+				})
+			}
+		}
+		out = append(out, item)
+	}
+	return out
 }

@@ -47,6 +47,15 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 			NodeName:          "node-a",
 			Digest:            "sha256:grpc-output",
 			Uri:               "http://artifact.local/output",
+			LogicalUri:        "jumi://runs/sample-1/nodes/parent-a/outputs/output",
+			Locations: []*ahv1.ArtifactLocation{{
+				Backend: &ahv1.ArtifactLocation_NodeLocal{
+					NodeLocal: &ahv1.NodeLocalLocation{
+						NodeName: "node-a",
+						Path:     "/var/lib/jumi-artifacts/cas/sha256/grpc-output",
+					},
+				},
+			}},
 			SizeBytes:         4096,
 		},
 	})
@@ -77,6 +86,9 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	}
 	if resolveResp.GetMaterializationPlan().GetMode() != string(domain.MaterializationModeRemoteFetch) {
 		t.Fatalf("materialization mode = %q, want remote_fetch", resolveResp.GetMaterializationPlan().GetMode())
+	}
+	if resolveResp.GetMaterializationPlan().GetExpectedSizeBytes() != 4096 {
+		t.Fatalf("expectedSizeBytes = %d, want 4096", resolveResp.GetMaterializationPlan().GetExpectedSizeBytes())
 	}
 
 	if _, err := client.NotifyNodeTerminal(ctx, &ahv1.NotifyNodeTerminalRequest{
