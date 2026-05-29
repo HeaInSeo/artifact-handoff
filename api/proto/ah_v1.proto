@@ -20,6 +20,8 @@ message ArtifactRef {
   string uri = 7;
   int64 size_bytes = 8;
   string producer_attempt_id = 9;
+  string logical_uri = 10;
+  repeated ArtifactLocation locations = 11;
 }
 
 message RegisterArtifactRequest {
@@ -55,10 +57,49 @@ message PlacementIntent {
   string node_name = 2;
 }
 
+message NodeLocalLocation {
+  string node_name = 1;
+  string path = 2;
+}
+
+message HttpSource {
+  string uri = 1;
+}
+
+message ArtifactLocation {
+  oneof backend {
+    NodeLocalLocation node_local = 1;
+    HttpSource http = 2;
+  }
+}
+
 message MaterializationPlan {
   string mode = 1;
   string uri = 2;
   string expected_digest = 3;
+  int64 expected_size_bytes = 4;
+  ArtifactLocation source_location = 5;
+  string local_path = 6;
+}
+
+message MaterializationCondition {
+  string kind = 1;
+  string node_name = 2;
+  string backend_id = 3;
+  string source_ref = 4;
+  string state = 5;
+}
+
+message MaterializationCandidate {
+  int32 priority = 1;
+  string mode = 2;
+  string source_ref = 3;
+  string expected_digest = 4;
+  int64 expected_size_bytes = 5;
+  string local_path = 6;
+  ArtifactLocation source_location = 7;
+  string uri = 8;
+  repeated MaterializationCondition conditions = 9;
 }
 
 message ResolveHandoffResponse {
@@ -72,6 +113,7 @@ message ResolveHandoffResponse {
   MaterializationPlan materialization_plan = 4;
   string reason = 5;
   bool retryable = 6;
+  repeated MaterializationCandidate materialization_candidates = 7;
 }
 
 message NotifyNodeTerminalRequest {
