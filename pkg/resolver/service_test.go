@@ -2115,6 +2115,141 @@ func TestHTTPListSources(t *testing.T) {
 	}
 }
 
+func TestAddSourceDefaultsDigestAndReadyState(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-add-source/producer-a/attempt-1/dataset"
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-add-source",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	source, err := service.AddSource(context.Background(), artifactID, domain.ArtifactSource{
+		BackendID: "legacy-http",
+		Location: domain.Location{
+			HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/abc123"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSource() error = %v", err)
+	}
+	if source.Digest != "sha256:abc123" {
+		t.Fatalf("source.Digest = %q, want sha256:abc123", source.Digest)
+	}
+	if source.State != domain.SourceStateReady {
+		t.Fatalf("source.State = %q, want ready", source.State)
+	}
+	if source.SourceID == "" || source.LocationFingerprint == "" {
+		t.Fatalf("source identifiers not populated: %+v", source)
+	}
+}
+
+func TestUpdateSourceStatePersistsStateChange(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-update-source/producer-a/attempt-1/dataset"
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-update-source",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	source, err := service.AddSource(context.Background(), artifactID, domain.ArtifactSource{
+		BackendID: "legacy-http",
+		Location: domain.Location{
+			HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/abc123"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSource() error = %v", err)
+	}
+
+	updated, err := service.UpdateSourceState(context.Background(), source.SourceID, domain.SourceStateUnreachable)
+	if err != nil {
+		t.Fatalf("UpdateSourceState() error = %v", err)
+	}
+	if updated.State != domain.SourceStateUnreachable {
+		t.Fatalf("updated.State = %q, want unreachable", updated.State)
+	}
+	stored, ok, err := store.GetArtifactSource(context.Background(), source.SourceID)
+	if err != nil {
+		t.Fatalf("GetArtifactSource() error = %v", err)
+	}
+	if !ok || stored.State != domain.SourceStateUnreachable {
+		t.Fatalf("stored source = %+v, want unreachable", stored)
+	}
+}
+
+func TestHTTPAddSourceAndUpdateState(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-http-add-source/producer-a/attempt-1/dataset"
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-http-add-source",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+
+	handler := NewHTTPHandler(service)
+	addReq := httptest.NewRequest(http.MethodPost, "/v1/sources:add", strings.NewReader(`{
+		"artifactId":"`+artifactID+`",
+		"source":{
+			"backendId":"legacy-http",
+			"location":{"http":{"uri":"http://artifact-source.local/artifacts/abc123"}}
+		}
+	}`))
+	addReq.Header.Set("Content-Type", "application/json")
+	addRec := httptest.NewRecorder()
+	handler.ServeHTTP(addRec, addReq)
+	if addRec.Code != http.StatusOK {
+		t.Fatalf("add source status = %d, body=%s", addRec.Code, addRec.Body.String())
+	}
+	var addBody struct {
+		Source domain.ArtifactSource `json:"source"`
+	}
+	if err := json.Unmarshal(addRec.Body.Bytes(), &addBody); err != nil {
+		t.Fatalf("decode add source body: %v", err)
+	}
+	if addBody.Source.SourceID == "" {
+		t.Fatalf("add source body missing source id: %+v", addBody.Source)
+	}
+
+	updateReq := httptest.NewRequest(http.MethodPost, "/v1/sources:updateState", strings.NewReader(`{
+		"sourceId":"`+addBody.Source.SourceID+`",
+		"state":"deleted"
+	}`))
+	updateReq.Header.Set("Content-Type", "application/json")
+	updateRec := httptest.NewRecorder()
+	handler.ServeHTTP(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("update source status = %d, body=%s", updateRec.Code, updateRec.Body.String())
+	}
+	var updateBody struct {
+		Source domain.ArtifactSource `json:"source"`
+	}
+	if err := json.Unmarshal(updateRec.Body.Bytes(), &updateBody); err != nil {
+		t.Fatalf("decode update source body: %v", err)
+	}
+	if updateBody.Source.State != domain.SourceStateDeleted {
+		t.Fatalf("updated state = %q, want deleted", updateBody.Source.State)
+	}
+}
+
 func TestResolveHandoffPlanningMode_IgnoresHTTPSourceOutsideAllowlist(t *testing.T) {
 	t.Setenv("AH_ALLOWED_HTTP_SOURCE_HOSTS", "artifact-source.local")
 

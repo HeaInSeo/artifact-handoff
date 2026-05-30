@@ -57,6 +57,17 @@ func (s *MemoryStore) GetArtifact(_ context.Context, sampleRunID, producerNodeID
 	return artifact, ok, nil
 }
 
+func (s *MemoryStore) GetArtifactByID(_ context.Context, artifactID string) (domain.Artifact, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, artifact := range s.artifacts {
+		if artifact.ArtifactID == artifactID {
+			return artifact, true, nil
+		}
+	}
+	return domain.Artifact{}, false, nil
+}
+
 func (s *MemoryStore) ListArtifactsBySampleRun(_ context.Context, sampleRunID string) ([]domain.Artifact, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -100,6 +111,13 @@ func (s *MemoryStore) ListArtifactSources(_ context.Context, artifactID string) 
 		out = append(out, source)
 	}
 	return out, nil
+}
+
+func (s *MemoryStore) GetArtifactSource(_ context.Context, sourceID string) (domain.ArtifactSource, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	source, ok := s.sources[sourceID]
+	return source, ok, nil
 }
 
 func (s *MemoryStore) ListNodeTerminalsBySampleRun(_ context.Context, sampleRunID string) ([]domain.NodeTerminalRecord, error) {

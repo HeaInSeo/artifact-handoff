@@ -107,6 +107,46 @@ func NewHTTPHandler(service *Service) http.Handler {
 		}
 		writeJSON(w, map[string][]domain.ArtifactSource{"sources": sources})
 	})
+	mux.HandleFunc("/v1/sources:add", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			ArtifactID string                `json:"artifactId"`
+			Source     domain.ArtifactSource `json:"source"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		source, err := service.AddSourceCore(r.Context(), req.ArtifactID, req.Source)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]domain.ArtifactSource{"source": source})
+	})
+	mux.HandleFunc("/v1/sources:updateState", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SourceID string             `json:"sourceId"`
+			State    domain.SourceState `json:"state"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		source, err := service.UpdateSourceStateCore(r.Context(), req.SourceID, req.State)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]domain.ArtifactSource{"source": source})
+	})
 	mux.HandleFunc("/v1/handoffs:resolve", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -206,6 +206,29 @@ func (s *SQLiteStore) GetArtifact(ctx context.Context, sampleRunID, producerNode
 	return a, true, nil
 }
 
+func (s *SQLiteStore) GetArtifactByID(ctx context.Context, artifactID string) (domain.Artifact, bool, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT sample_run_id, producer_node_id, producer_attempt_id, output_name,
+		       artifact_id, digest, logical_uri, node_name, uri, locations_json, size_bytes, created_at
+		FROM artifacts WHERE artifact_id = ?`, artifactID)
+	var a domain.Artifact
+	var createdAt string
+	var locationsJSON string
+	err := row.Scan(&a.SampleRunID, &a.ProducerNodeID, &a.ProducerAttemptID, &a.OutputName,
+		&a.ArtifactID, &a.Digest, &a.LogicalURI, &a.NodeName, &a.URI, &locationsJSON, &a.SizeBytes, &createdAt)
+	if err == sql.ErrNoRows {
+		return domain.Artifact{}, false, nil
+	}
+	if err != nil {
+		return domain.Artifact{}, false, err
+	}
+	if err := json.Unmarshal([]byte(locationsJSON), &a.Locations); err != nil {
+		return domain.Artifact{}, false, fmt.Errorf("unmarshal locations_json: %w", err)
+	}
+	a.CreatedAt, _ = parseTimeStr(createdAt)
+	return a, true, nil
+}
+
 func (s *SQLiteStore) ListArtifactsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT sample_run_id, producer_node_id, producer_attempt_id, output_name,
@@ -319,6 +342,35 @@ func (s *SQLiteStore) ListArtifactSources(ctx context.Context, artifactID string
 		out = append(out, source)
 	}
 	return out, rows.Err()
+}
+
+func (s *SQLiteStore) GetArtifactSource(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT source_id, artifact_id, backend_id, digest, state,
+		       location_fingerprint, location_json, created_at, updated_at
+		FROM artifact_sources
+		WHERE source_id = ?`, sourceID)
+	var source domain.ArtifactSource
+	var state string
+	var locationJSON string
+	var createdAt, updatedAt string
+	err := row.Scan(
+		&source.SourceID, &source.ArtifactID, &source.BackendID, &source.Digest,
+		&state, &source.LocationFingerprint, &locationJSON, &createdAt, &updatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return domain.ArtifactSource{}, false, nil
+	}
+	if err != nil {
+		return domain.ArtifactSource{}, false, err
+	}
+	source.State = domain.SourceState(state)
+	source.CreatedAt, _ = parseTimeStr(createdAt)
+	source.UpdatedAt, _ = parseTimeStr(updatedAt)
+	if err := json.Unmarshal([]byte(locationJSON), &source.Location); err != nil {
+		return domain.ArtifactSource{}, false, fmt.Errorf("unmarshal location_json: %w", err)
+	}
+	return source, true, nil
 }
 
 func (s *SQLiteStore) RecordNodeTerminal(ctx context.Context, r domain.NodeTerminalRecord) error {

@@ -206,6 +206,17 @@ const (
 	SourceStateDeleted     SourceState = "deleted"
 )
 
+func (s SourceState) Validate() error {
+	switch s {
+	case SourceStatePending, SourceStateReady, SourceStateStale, SourceStateUnreachable, SourceStateDeleted:
+		return nil
+	case "":
+		return fmt.Errorf("source state is required")
+	default:
+		return fmt.Errorf("unknown source state %q", s)
+	}
+}
+
 type ArtifactSource struct {
 	SourceID            string      `json:"sourceId"`
 	ArtifactID          string      `json:"artifactId"`

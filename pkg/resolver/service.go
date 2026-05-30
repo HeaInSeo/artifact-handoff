@@ -81,6 +81,14 @@ func (s *Service) ListSources(ctx context.Context, artifactID string) ([]domain.
 	return s.ListSourcesCore(ctx, artifactID)
 }
 
+func (s *Service) AddSource(ctx context.Context, artifactID string, source domain.ArtifactSource) (domain.ArtifactSource, error) {
+	return s.AddSourceCore(ctx, artifactID, source)
+}
+
+func (s *Service) UpdateSourceState(ctx context.Context, sourceID string, state domain.SourceState) (domain.ArtifactSource, error) {
+	return s.UpdateSourceStateCore(ctx, sourceID, state)
+}
+
 func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Artifact) (domain.AvailabilityState, error) {
 	if artifact.SampleRunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
 		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
@@ -180,6 +188,77 @@ func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]dom
 		filtered = append(filtered, source)
 	}
 	return filtered, nil
+}
+
+func (s *Service) AddSourceCore(ctx context.Context, artifactID string, source domain.ArtifactSource) (domain.ArtifactSource, error) {
+	if strings.TrimSpace(artifactID) == "" {
+		return domain.ArtifactSource{}, fmt.Errorf("artifactID is required")
+	}
+	artifact, ok, err := s.store.GetArtifactByID(ctx, artifactID)
+	if err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	if !ok {
+		return domain.ArtifactSource{}, fmt.Errorf("artifact %q not found", artifactID)
+	}
+	source.ArtifactID = artifactID
+	if strings.TrimSpace(source.Digest) == "" {
+		source.Digest = artifact.Digest
+	}
+	if source.State == "" {
+		source.State = domain.SourceStateReady
+	}
+	if err := source.State.Validate(); err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	if strings.TrimSpace(source.LocationFingerprint) == "" {
+		source.LocationFingerprint = domain.LocationFingerprint(source.Location)
+	}
+	if strings.TrimSpace(source.SourceID) == "" {
+		source.SourceID = domain.SourceID(source.ArtifactID, source.BackendID, source.LocationFingerprint)
+	}
+	now := s.now()
+	if source.CreatedAt.IsZero() {
+		source.CreatedAt = now
+	}
+	source.UpdatedAt = now
+	if err := domain.ValidateArtifactSourceForArtifact(artifact, source); err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	if err := s.store.PutArtifactSources(ctx, artifactID, []domain.ArtifactSource{source}); err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	stored, _, err := s.store.GetArtifactSource(ctx, source.SourceID)
+	if err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	return stored, nil
+}
+
+func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, state domain.SourceState) (domain.ArtifactSource, error) {
+	if strings.TrimSpace(sourceID) == "" {
+		return domain.ArtifactSource{}, fmt.Errorf("sourceID is required")
+	}
+	if err := state.Validate(); err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	source, ok, err := s.store.GetArtifactSource(ctx, sourceID)
+	if err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	if !ok {
+		return domain.ArtifactSource{}, fmt.Errorf("source %q not found", sourceID)
+	}
+	source.State = state
+	source.UpdatedAt = s.now()
+	if err := s.store.PutArtifactSources(ctx, source.ArtifactID, []domain.ArtifactSource{source}); err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	stored, _, err := s.store.GetArtifactSource(ctx, source.SourceID)
+	if err != nil {
+		return domain.ArtifactSource{}, err
+	}
+	return stored, nil
 }
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {

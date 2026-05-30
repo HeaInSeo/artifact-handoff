@@ -73,6 +73,42 @@ message ArtifactLocation {
   }
 }
 
+message ArtifactSource {
+  string source_id = 1;
+  string artifact_id = 2;
+  string backend_id = 3;
+  string digest = 4;
+  string state = 5;
+  string location_fingerprint = 6;
+  ArtifactLocation location = 7;
+}
+
+message AddSourceRequest {
+  string artifact_id = 1;
+  ArtifactSource source = 2;
+}
+
+message AddSourceResponse {
+  ArtifactSource source = 1;
+}
+
+message UpdateSourceStateRequest {
+  string source_id = 1;
+  string state = 2;
+}
+
+message UpdateSourceStateResponse {
+  ArtifactSource source = 1;
+}
+
+message ListSourcesRequest {
+  string artifact_id = 1;
+}
+
+message ListSourcesResponse {
+  repeated ArtifactSource sources = 1;
+}
+
 message MaterializationPlan {
   string mode = 1;
   string uri = 2;
@@ -167,6 +203,9 @@ message GetSampleRunLifecycleResponse {
 
 service ArtifactHandoffResolver {
   rpc RegisterArtifact(RegisterArtifactRequest) returns (RegisterArtifactResponse);
+  rpc AddSource(AddSourceRequest) returns (AddSourceResponse);
+  rpc UpdateSourceState(UpdateSourceStateRequest) returns (UpdateSourceStateResponse);
+  rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse);
   rpc ResolveHandoff(ResolveHandoffRequest) returns (ResolveHandoffResponse);
   rpc NotifyNodeTerminal(NotifyNodeTerminalRequest) returns (NotifyNodeTerminalResponse);
   rpc FinalizeSampleRun(FinalizeSampleRunRequest) returns (FinalizeSampleRunResponse);

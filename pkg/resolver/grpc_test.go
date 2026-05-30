@@ -56,7 +56,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 					},
 				},
 			}},
-			SizeBytes:         4096,
+			SizeBytes: 4096,
 		},
 	})
 	if err != nil {
@@ -117,5 +117,44 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	}
 	if lifecycleResp.GetRetainedArtifactBytes() != 4096 {
 		t.Fatalf("retainedArtifactBytes = %d, want 4096", lifecycleResp.GetRetainedArtifactBytes())
+	}
+
+	addResp, err := client.AddSource(ctx, &ahv1.AddSourceRequest{
+		ArtifactId: "sample-1/parent-a/attempt-1/output",
+		Source: &ahv1.ArtifactSource{
+			BackendId: "legacy-http",
+			Location: &ahv1.ArtifactLocation{
+				Backend: &ahv1.ArtifactLocation_Http{
+					Http: &ahv1.HttpSource{Uri: "http://artifact-source.local/backup"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSource() error = %v", err)
+	}
+	if addResp.GetSource().GetSourceId() == "" {
+		t.Fatalf("AddSource() sourceId = empty")
+	}
+
+	listResp, err := client.ListSources(ctx, &ahv1.ListSourcesRequest{
+		ArtifactId: "sample-1/parent-a/attempt-1/output",
+	})
+	if err != nil {
+		t.Fatalf("ListSources() error = %v", err)
+	}
+	if len(listResp.GetSources()) < 2 {
+		t.Fatalf("len(ListSources().sources) = %d, want >= 2", len(listResp.GetSources()))
+	}
+
+	updateResp, err := client.UpdateSourceState(ctx, &ahv1.UpdateSourceStateRequest{
+		SourceId: addResp.GetSource().GetSourceId(),
+		State:    string(domain.SourceStateDeleted),
+	})
+	if err != nil {
+		t.Fatalf("UpdateSourceState() error = %v", err)
+	}
+	if updateResp.GetSource().GetState() != string(domain.SourceStateDeleted) {
+		t.Fatalf("updated source state = %q, want deleted", updateResp.GetSource().GetState())
 	}
 }

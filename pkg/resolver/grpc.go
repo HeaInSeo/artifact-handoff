@@ -43,6 +43,30 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 	return &ahv1.RegisterArtifactResponse{AvailabilityState: string(state)}, nil
 }
 
+func (s *grpcResolverServer) AddSource(ctx context.Context, req *ahv1.AddSourceRequest) (*ahv1.AddSourceResponse, error) {
+	source, err := s.service.AddSourceCore(ctx, req.GetArtifactId(), grpcSourceToDomain(req.GetSource()))
+	if err != nil {
+		return nil, err
+	}
+	return &ahv1.AddSourceResponse{Source: grpcSourceFromDomain(source)}, nil
+}
+
+func (s *grpcResolverServer) UpdateSourceState(ctx context.Context, req *ahv1.UpdateSourceStateRequest) (*ahv1.UpdateSourceStateResponse, error) {
+	source, err := s.service.UpdateSourceStateCore(ctx, req.GetSourceId(), domain.SourceState(req.GetState()))
+	if err != nil {
+		return nil, err
+	}
+	return &ahv1.UpdateSourceStateResponse{Source: grpcSourceFromDomain(source)}, nil
+}
+
+func (s *grpcResolverServer) ListSources(ctx context.Context, req *ahv1.ListSourcesRequest) (*ahv1.ListSourcesResponse, error) {
+	sources, err := s.service.ListSourcesCore(ctx, req.GetArtifactId())
+	if err != nil {
+		return nil, err
+	}
+	return &ahv1.ListSourcesResponse{Sources: grpcSourcesFromDomain(sources)}, nil
+}
+
 func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.ResolveHandoffRequest) (*ahv1.ResolveHandoffResponse, error) {
 	s.service.Metrics().IncGRPCResolveHandoff()
 	binding := req.GetBinding()
@@ -232,4 +256,65 @@ func grpcCandidatesFromDomain(candidates []domain.MaterializationCandidate) []*a
 		out = append(out, item)
 	}
 	return out
+}
+
+func grpcSourceToDomain(source *ahv1.ArtifactSource) domain.ArtifactSource {
+	if source == nil {
+		return domain.ArtifactSource{}
+	}
+	return domain.ArtifactSource{
+		SourceID:            source.GetSourceId(),
+		ArtifactID:          source.GetArtifactId(),
+		BackendID:           source.GetBackendId(),
+		Digest:              source.GetDigest(),
+		State:               domain.SourceState(source.GetState()),
+		LocationFingerprint: source.GetLocationFingerprint(),
+		Location:            grpcLocationToDomain(source.GetLocation()),
+	}
+}
+
+func grpcSourceFromDomain(source domain.ArtifactSource) *ahv1.ArtifactSource {
+	return &ahv1.ArtifactSource{
+		SourceId:            source.SourceID,
+		ArtifactId:          source.ArtifactID,
+		BackendId:           source.BackendID,
+		Digest:              source.Digest,
+		State:               string(source.State),
+		LocationFingerprint: source.LocationFingerprint,
+		Location:            grpcLocationFromDomain(&source.Location),
+	}
+}
+
+func grpcSourcesFromDomain(sources []domain.ArtifactSource) []*ahv1.ArtifactSource {
+	if len(sources) == 0 {
+		return nil
+	}
+	out := make([]*ahv1.ArtifactSource, 0, len(sources))
+	for _, source := range sources {
+		out = append(out, grpcSourceFromDomain(source))
+	}
+	return out
+}
+
+func grpcLocationToDomain(location *ahv1.ArtifactLocation) domain.Location {
+	if location == nil {
+		return domain.Location{}
+	}
+	switch backend := location.GetBackend().(type) {
+	case *ahv1.ArtifactLocation_NodeLocal:
+		return domain.Location{
+			NodeLocal: &domain.NodeLocalLocation{
+				NodeName: backend.NodeLocal.GetNodeName(),
+				Path:     backend.NodeLocal.GetPath(),
+			},
+		}
+	case *ahv1.ArtifactLocation_Http:
+		return domain.Location{
+			HTTP: &domain.HTTPSource{
+				URI: backend.Http.GetUri(),
+			},
+		}
+	default:
+		return domain.Location{}
+	}
 }

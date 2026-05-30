@@ -653,6 +653,378 @@ func (*ArtifactLocation_NodeLocal) isArtifactLocation_Backend() {}
 
 func (*ArtifactLocation_Http) isArtifactLocation_Backend() {}
 
+type ArtifactSource struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	SourceId            string                 `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	ArtifactId          string                 `protobuf:"bytes,2,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	BackendId           string                 `protobuf:"bytes,3,opt,name=backend_id,json=backendId,proto3" json:"backend_id,omitempty"`
+	Digest              string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`
+	State               string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
+	LocationFingerprint string                 `protobuf:"bytes,6,opt,name=location_fingerprint,json=locationFingerprint,proto3" json:"location_fingerprint,omitempty"`
+	Location            *ArtifactLocation      `protobuf:"bytes,7,opt,name=location,proto3" json:"location,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ArtifactSource) Reset() {
+	*x = ArtifactSource{}
+	mi := &file_ah_v1_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArtifactSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArtifactSource) ProtoMessage() {}
+
+func (x *ArtifactSource) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArtifactSource.ProtoReflect.Descriptor instead.
+func (*ArtifactSource) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ArtifactSource) GetSourceId() string {
+	if x != nil {
+		return x.SourceId
+	}
+	return ""
+}
+
+func (x *ArtifactSource) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *ArtifactSource) GetBackendId() string {
+	if x != nil {
+		return x.BackendId
+	}
+	return ""
+}
+
+func (x *ArtifactSource) GetDigest() string {
+	if x != nil {
+		return x.Digest
+	}
+	return ""
+}
+
+func (x *ArtifactSource) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ArtifactSource) GetLocationFingerprint() string {
+	if x != nil {
+		return x.LocationFingerprint
+	}
+	return ""
+}
+
+func (x *ArtifactSource) GetLocation() *ArtifactLocation {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+type AddSourceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	Source        *ArtifactSource        `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddSourceRequest) Reset() {
+	*x = AddSourceRequest{}
+	mi := &file_ah_v1_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddSourceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddSourceRequest) ProtoMessage() {}
+
+func (x *AddSourceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddSourceRequest.ProtoReflect.Descriptor instead.
+func (*AddSourceRequest) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AddSourceRequest) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+func (x *AddSourceRequest) GetSource() *ArtifactSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+type AddSourceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Source        *ArtifactSource        `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddSourceResponse) Reset() {
+	*x = AddSourceResponse{}
+	mi := &file_ah_v1_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddSourceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddSourceResponse) ProtoMessage() {}
+
+func (x *AddSourceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddSourceResponse.ProtoReflect.Descriptor instead.
+func (*AddSourceResponse) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AddSourceResponse) GetSource() *ArtifactSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+type UpdateSourceStateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SourceId      string                 `protobuf:"bytes,1,opt,name=source_id,json=sourceId,proto3" json:"source_id,omitempty"`
+	State         string                 `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSourceStateRequest) Reset() {
+	*x = UpdateSourceStateRequest{}
+	mi := &file_ah_v1_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSourceStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSourceStateRequest) ProtoMessage() {}
+
+func (x *UpdateSourceStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSourceStateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateSourceStateRequest) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *UpdateSourceStateRequest) GetSourceId() string {
+	if x != nil {
+		return x.SourceId
+	}
+	return ""
+}
+
+func (x *UpdateSourceStateRequest) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+type UpdateSourceStateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Source        *ArtifactSource        `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateSourceStateResponse) Reset() {
+	*x = UpdateSourceStateResponse{}
+	mi := &file_ah_v1_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateSourceStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateSourceStateResponse) ProtoMessage() {}
+
+func (x *UpdateSourceStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateSourceStateResponse.ProtoReflect.Descriptor instead.
+func (*UpdateSourceStateResponse) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *UpdateSourceStateResponse) GetSource() *ArtifactSource {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+type ListSourcesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ArtifactId    string                 `protobuf:"bytes,1,opt,name=artifact_id,json=artifactId,proto3" json:"artifact_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSourcesRequest) Reset() {
+	*x = ListSourcesRequest{}
+	mi := &file_ah_v1_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSourcesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSourcesRequest) ProtoMessage() {}
+
+func (x *ListSourcesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSourcesRequest.ProtoReflect.Descriptor instead.
+func (*ListSourcesRequest) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ListSourcesRequest) GetArtifactId() string {
+	if x != nil {
+		return x.ArtifactId
+	}
+	return ""
+}
+
+type ListSourcesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Sources       []*ArtifactSource      `protobuf:"bytes,1,rep,name=sources,proto3" json:"sources,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListSourcesResponse) Reset() {
+	*x = ListSourcesResponse{}
+	mi := &file_ah_v1_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListSourcesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListSourcesResponse) ProtoMessage() {}
+
+func (x *ListSourcesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ah_v1_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListSourcesResponse.ProtoReflect.Descriptor instead.
+func (*ListSourcesResponse) Descriptor() ([]byte, []int) {
+	return file_ah_v1_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListSourcesResponse) GetSources() []*ArtifactSource {
+	if x != nil {
+		return x.Sources
+	}
+	return nil
+}
+
 type MaterializationPlan struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Mode              string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
@@ -667,7 +1039,7 @@ type MaterializationPlan struct {
 
 func (x *MaterializationPlan) Reset() {
 	*x = MaterializationPlan{}
-	mi := &file_ah_v1_proto_msgTypes[9]
+	mi := &file_ah_v1_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -679,7 +1051,7 @@ func (x *MaterializationPlan) String() string {
 func (*MaterializationPlan) ProtoMessage() {}
 
 func (x *MaterializationPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[9]
+	mi := &file_ah_v1_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -692,7 +1064,7 @@ func (x *MaterializationPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MaterializationPlan.ProtoReflect.Descriptor instead.
 func (*MaterializationPlan) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{9}
+	return file_ah_v1_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *MaterializationPlan) GetMode() string {
@@ -750,7 +1122,7 @@ type MaterializationCondition struct {
 
 func (x *MaterializationCondition) Reset() {
 	*x = MaterializationCondition{}
-	mi := &file_ah_v1_proto_msgTypes[10]
+	mi := &file_ah_v1_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +1134,7 @@ func (x *MaterializationCondition) String() string {
 func (*MaterializationCondition) ProtoMessage() {}
 
 func (x *MaterializationCondition) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[10]
+	mi := &file_ah_v1_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +1147,7 @@ func (x *MaterializationCondition) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MaterializationCondition.ProtoReflect.Descriptor instead.
 func (*MaterializationCondition) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{10}
+	return file_ah_v1_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *MaterializationCondition) GetKind() string {
@@ -830,7 +1202,7 @@ type MaterializationCandidate struct {
 
 func (x *MaterializationCandidate) Reset() {
 	*x = MaterializationCandidate{}
-	mi := &file_ah_v1_proto_msgTypes[11]
+	mi := &file_ah_v1_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -842,7 +1214,7 @@ func (x *MaterializationCandidate) String() string {
 func (*MaterializationCandidate) ProtoMessage() {}
 
 func (x *MaterializationCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[11]
+	mi := &file_ah_v1_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -855,7 +1227,7 @@ func (x *MaterializationCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MaterializationCandidate.ProtoReflect.Descriptor instead.
 func (*MaterializationCandidate) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{11}
+	return file_ah_v1_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *MaterializationCandidate) GetPriority() int32 {
@@ -936,7 +1308,7 @@ type ResolveHandoffResponse struct {
 
 func (x *ResolveHandoffResponse) Reset() {
 	*x = ResolveHandoffResponse{}
-	mi := &file_ah_v1_proto_msgTypes[12]
+	mi := &file_ah_v1_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +1320,7 @@ func (x *ResolveHandoffResponse) String() string {
 func (*ResolveHandoffResponse) ProtoMessage() {}
 
 func (x *ResolveHandoffResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[12]
+	mi := &file_ah_v1_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +1333,7 @@ func (x *ResolveHandoffResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveHandoffResponse.ProtoReflect.Descriptor instead.
 func (*ResolveHandoffResponse) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{12}
+	return file_ah_v1_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResolveHandoffResponse) GetResolutionStatus() string {
@@ -1025,7 +1397,7 @@ type NotifyNodeTerminalRequest struct {
 
 func (x *NotifyNodeTerminalRequest) Reset() {
 	*x = NotifyNodeTerminalRequest{}
-	mi := &file_ah_v1_proto_msgTypes[13]
+	mi := &file_ah_v1_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1037,7 +1409,7 @@ func (x *NotifyNodeTerminalRequest) String() string {
 func (*NotifyNodeTerminalRequest) ProtoMessage() {}
 
 func (x *NotifyNodeTerminalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[13]
+	mi := &file_ah_v1_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1050,7 +1422,7 @@ func (x *NotifyNodeTerminalRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotifyNodeTerminalRequest.ProtoReflect.Descriptor instead.
 func (*NotifyNodeTerminalRequest) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{13}
+	return file_ah_v1_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *NotifyNodeTerminalRequest) GetSampleRunId() string {
@@ -1090,7 +1462,7 @@ type NotifyNodeTerminalResponse struct {
 
 func (x *NotifyNodeTerminalResponse) Reset() {
 	*x = NotifyNodeTerminalResponse{}
-	mi := &file_ah_v1_proto_msgTypes[14]
+	mi := &file_ah_v1_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1102,7 +1474,7 @@ func (x *NotifyNodeTerminalResponse) String() string {
 func (*NotifyNodeTerminalResponse) ProtoMessage() {}
 
 func (x *NotifyNodeTerminalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[14]
+	mi := &file_ah_v1_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1115,7 +1487,7 @@ func (x *NotifyNodeTerminalResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotifyNodeTerminalResponse.ProtoReflect.Descriptor instead.
 func (*NotifyNodeTerminalResponse) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{14}
+	return file_ah_v1_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *NotifyNodeTerminalResponse) GetAccepted() bool {
@@ -1134,7 +1506,7 @@ type FinalizeSampleRunRequest struct {
 
 func (x *FinalizeSampleRunRequest) Reset() {
 	*x = FinalizeSampleRunRequest{}
-	mi := &file_ah_v1_proto_msgTypes[15]
+	mi := &file_ah_v1_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1146,7 +1518,7 @@ func (x *FinalizeSampleRunRequest) String() string {
 func (*FinalizeSampleRunRequest) ProtoMessage() {}
 
 func (x *FinalizeSampleRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[15]
+	mi := &file_ah_v1_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1159,7 +1531,7 @@ func (x *FinalizeSampleRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeSampleRunRequest.ProtoReflect.Descriptor instead.
 func (*FinalizeSampleRunRequest) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{15}
+	return file_ah_v1_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *FinalizeSampleRunRequest) GetSampleRunId() string {
@@ -1178,7 +1550,7 @@ type FinalizeSampleRunResponse struct {
 
 func (x *FinalizeSampleRunResponse) Reset() {
 	*x = FinalizeSampleRunResponse{}
-	mi := &file_ah_v1_proto_msgTypes[16]
+	mi := &file_ah_v1_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +1562,7 @@ func (x *FinalizeSampleRunResponse) String() string {
 func (*FinalizeSampleRunResponse) ProtoMessage() {}
 
 func (x *FinalizeSampleRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[16]
+	mi := &file_ah_v1_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +1575,7 @@ func (x *FinalizeSampleRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FinalizeSampleRunResponse.ProtoReflect.Descriptor instead.
 func (*FinalizeSampleRunResponse) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{16}
+	return file_ah_v1_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *FinalizeSampleRunResponse) GetAccepted() bool {
@@ -1222,7 +1594,7 @@ type EvaluateGCRequest struct {
 
 func (x *EvaluateGCRequest) Reset() {
 	*x = EvaluateGCRequest{}
-	mi := &file_ah_v1_proto_msgTypes[17]
+	mi := &file_ah_v1_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1234,7 +1606,7 @@ func (x *EvaluateGCRequest) String() string {
 func (*EvaluateGCRequest) ProtoMessage() {}
 
 func (x *EvaluateGCRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[17]
+	mi := &file_ah_v1_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1247,7 +1619,7 @@ func (x *EvaluateGCRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateGCRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateGCRequest) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{17}
+	return file_ah_v1_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *EvaluateGCRequest) GetSampleRunId() string {
@@ -1266,7 +1638,7 @@ type EvaluateGCResponse struct {
 
 func (x *EvaluateGCResponse) Reset() {
 	*x = EvaluateGCResponse{}
-	mi := &file_ah_v1_proto_msgTypes[18]
+	mi := &file_ah_v1_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1278,7 +1650,7 @@ func (x *EvaluateGCResponse) String() string {
 func (*EvaluateGCResponse) ProtoMessage() {}
 
 func (x *EvaluateGCResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[18]
+	mi := &file_ah_v1_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1291,7 +1663,7 @@ func (x *EvaluateGCResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateGCResponse.ProtoReflect.Descriptor instead.
 func (*EvaluateGCResponse) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{18}
+	return file_ah_v1_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *EvaluateGCResponse) GetAccepted() bool {
@@ -1310,7 +1682,7 @@ type GetSampleRunLifecycleRequest struct {
 
 func (x *GetSampleRunLifecycleRequest) Reset() {
 	*x = GetSampleRunLifecycleRequest{}
-	mi := &file_ah_v1_proto_msgTypes[19]
+	mi := &file_ah_v1_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1322,7 +1694,7 @@ func (x *GetSampleRunLifecycleRequest) String() string {
 func (*GetSampleRunLifecycleRequest) ProtoMessage() {}
 
 func (x *GetSampleRunLifecycleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[19]
+	mi := &file_ah_v1_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1335,7 +1707,7 @@ func (x *GetSampleRunLifecycleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSampleRunLifecycleRequest.ProtoReflect.Descriptor instead.
 func (*GetSampleRunLifecycleRequest) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{19}
+	return file_ah_v1_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetSampleRunLifecycleRequest) GetSampleRunId() string {
@@ -1368,7 +1740,7 @@ type GetSampleRunLifecycleResponse struct {
 
 func (x *GetSampleRunLifecycleResponse) Reset() {
 	*x = GetSampleRunLifecycleResponse{}
-	mi := &file_ah_v1_proto_msgTypes[20]
+	mi := &file_ah_v1_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1380,7 +1752,7 @@ func (x *GetSampleRunLifecycleResponse) String() string {
 func (*GetSampleRunLifecycleResponse) ProtoMessage() {}
 
 func (x *GetSampleRunLifecycleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_ah_v1_proto_msgTypes[20]
+	mi := &file_ah_v1_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1393,7 +1765,7 @@ func (x *GetSampleRunLifecycleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSampleRunLifecycleResponse.ProtoReflect.Descriptor instead.
 func (*GetSampleRunLifecycleResponse) Descriptor() ([]byte, []int) {
-	return file_ah_v1_proto_rawDescGZIP(), []int{20}
+	return file_ah_v1_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetSampleRunLifecycleResponse) GetSampleRunId() string {
@@ -1558,7 +1930,33 @@ const file_ah_v1_proto_rawDesc = "" +
 	"\n" +
 	"node_local\x18\x01 \x01(\v2\x18.ah.v1.NodeLocalLocationH\x00R\tnodeLocal\x12'\n" +
 	"\x04http\x18\x02 \x01(\v2\x11.ah.v1.HttpSourceH\x00R\x04httpB\t\n" +
-	"\abackend\"\xf5\x01\n" +
+	"\abackend\"\x83\x02\n" +
+	"\x0eArtifactSource\x12\x1b\n" +
+	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x1f\n" +
+	"\vartifact_id\x18\x02 \x01(\tR\n" +
+	"artifactId\x12\x1d\n" +
+	"\n" +
+	"backend_id\x18\x03 \x01(\tR\tbackendId\x12\x16\n" +
+	"\x06digest\x18\x04 \x01(\tR\x06digest\x12\x14\n" +
+	"\x05state\x18\x05 \x01(\tR\x05state\x121\n" +
+	"\x14location_fingerprint\x18\x06 \x01(\tR\x13locationFingerprint\x123\n" +
+	"\blocation\x18\a \x01(\v2\x17.ah.v1.ArtifactLocationR\blocation\"b\n" +
+	"\x10AddSourceRequest\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\x12-\n" +
+	"\x06source\x18\x02 \x01(\v2\x15.ah.v1.ArtifactSourceR\x06source\"B\n" +
+	"\x11AddSourceResponse\x12-\n" +
+	"\x06source\x18\x01 \x01(\v2\x15.ah.v1.ArtifactSourceR\x06source\"M\n" +
+	"\x18UpdateSourceStateRequest\x12\x1b\n" +
+	"\tsource_id\x18\x01 \x01(\tR\bsourceId\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\"J\n" +
+	"\x19UpdateSourceStateResponse\x12-\n" +
+	"\x06source\x18\x01 \x01(\v2\x15.ah.v1.ArtifactSourceR\x06source\"5\n" +
+	"\x12ListSourcesRequest\x12\x1f\n" +
+	"\vartifact_id\x18\x01 \x01(\tR\n" +
+	"artifactId\"F\n" +
+	"\x13ListSourcesResponse\x12/\n" +
+	"\asources\x18\x01 \x03(\v2\x15.ah.v1.ArtifactSourceR\asources\"\xf5\x01\n" +
 	"\x13MaterializationPlan\x12\x12\n" +
 	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x10\n" +
 	"\x03uri\x18\x02 \x01(\tR\x03uri\x12'\n" +
@@ -1632,9 +2030,12 @@ const file_ah_v1_proto_rawDesc = "" +
 	"\x11failed_node_count\x18\f \x01(\x05R\x0ffailedNodeCount\x12.\n" +
 	"\x13canceled_node_count\x18\r \x01(\x05R\x11canceledNodeCount\x126\n" +
 	"\x17retained_artifact_count\x18\x0e \x01(\x05R\x15retainedArtifactCount\x126\n" +
-	"\x17retained_artifact_bytes\x18\x0f \x01(\x03R\x15retainedArtifactBytes2\x97\x04\n" +
+	"\x17retained_artifact_bytes\x18\x0f \x01(\x03R\x15retainedArtifactBytes2\xf5\x05\n" +
 	"\x17ArtifactHandoffResolver\x12S\n" +
-	"\x10RegisterArtifact\x12\x1e.ah.v1.RegisterArtifactRequest\x1a\x1f.ah.v1.RegisterArtifactResponse\x12M\n" +
+	"\x10RegisterArtifact\x12\x1e.ah.v1.RegisterArtifactRequest\x1a\x1f.ah.v1.RegisterArtifactResponse\x12>\n" +
+	"\tAddSource\x12\x17.ah.v1.AddSourceRequest\x1a\x18.ah.v1.AddSourceResponse\x12V\n" +
+	"\x11UpdateSourceState\x12\x1f.ah.v1.UpdateSourceStateRequest\x1a .ah.v1.UpdateSourceStateResponse\x12D\n" +
+	"\vListSources\x12\x19.ah.v1.ListSourcesRequest\x1a\x1a.ah.v1.ListSourcesResponse\x12M\n" +
 	"\x0eResolveHandoff\x12\x1c.ah.v1.ResolveHandoffRequest\x1a\x1d.ah.v1.ResolveHandoffResponse\x12Y\n" +
 	"\x12NotifyNodeTerminal\x12 .ah.v1.NotifyNodeTerminalRequest\x1a!.ah.v1.NotifyNodeTerminalResponse\x12V\n" +
 	"\x11FinalizeSampleRun\x12\x1f.ah.v1.FinalizeSampleRunRequest\x1a .ah.v1.FinalizeSampleRunResponse\x12A\n" +
@@ -1654,7 +2055,7 @@ func file_ah_v1_proto_rawDescGZIP() []byte {
 	return file_ah_v1_proto_rawDescData
 }
 
-var file_ah_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_ah_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_ah_v1_proto_goTypes = []any{
 	(*ArtifactRef)(nil),                   // 0: ah.v1.ArtifactRef
 	(*RegisterArtifactRequest)(nil),       // 1: ah.v1.RegisterArtifactRequest
@@ -1665,18 +2066,25 @@ var file_ah_v1_proto_goTypes = []any{
 	(*NodeLocalLocation)(nil),             // 6: ah.v1.NodeLocalLocation
 	(*HttpSource)(nil),                    // 7: ah.v1.HttpSource
 	(*ArtifactLocation)(nil),              // 8: ah.v1.ArtifactLocation
-	(*MaterializationPlan)(nil),           // 9: ah.v1.MaterializationPlan
-	(*MaterializationCondition)(nil),      // 10: ah.v1.MaterializationCondition
-	(*MaterializationCandidate)(nil),      // 11: ah.v1.MaterializationCandidate
-	(*ResolveHandoffResponse)(nil),        // 12: ah.v1.ResolveHandoffResponse
-	(*NotifyNodeTerminalRequest)(nil),     // 13: ah.v1.NotifyNodeTerminalRequest
-	(*NotifyNodeTerminalResponse)(nil),    // 14: ah.v1.NotifyNodeTerminalResponse
-	(*FinalizeSampleRunRequest)(nil),      // 15: ah.v1.FinalizeSampleRunRequest
-	(*FinalizeSampleRunResponse)(nil),     // 16: ah.v1.FinalizeSampleRunResponse
-	(*EvaluateGCRequest)(nil),             // 17: ah.v1.EvaluateGCRequest
-	(*EvaluateGCResponse)(nil),            // 18: ah.v1.EvaluateGCResponse
-	(*GetSampleRunLifecycleRequest)(nil),  // 19: ah.v1.GetSampleRunLifecycleRequest
-	(*GetSampleRunLifecycleResponse)(nil), // 20: ah.v1.GetSampleRunLifecycleResponse
+	(*ArtifactSource)(nil),                // 9: ah.v1.ArtifactSource
+	(*AddSourceRequest)(nil),              // 10: ah.v1.AddSourceRequest
+	(*AddSourceResponse)(nil),             // 11: ah.v1.AddSourceResponse
+	(*UpdateSourceStateRequest)(nil),      // 12: ah.v1.UpdateSourceStateRequest
+	(*UpdateSourceStateResponse)(nil),     // 13: ah.v1.UpdateSourceStateResponse
+	(*ListSourcesRequest)(nil),            // 14: ah.v1.ListSourcesRequest
+	(*ListSourcesResponse)(nil),           // 15: ah.v1.ListSourcesResponse
+	(*MaterializationPlan)(nil),           // 16: ah.v1.MaterializationPlan
+	(*MaterializationCondition)(nil),      // 17: ah.v1.MaterializationCondition
+	(*MaterializationCandidate)(nil),      // 18: ah.v1.MaterializationCandidate
+	(*ResolveHandoffResponse)(nil),        // 19: ah.v1.ResolveHandoffResponse
+	(*NotifyNodeTerminalRequest)(nil),     // 20: ah.v1.NotifyNodeTerminalRequest
+	(*NotifyNodeTerminalResponse)(nil),    // 21: ah.v1.NotifyNodeTerminalResponse
+	(*FinalizeSampleRunRequest)(nil),      // 22: ah.v1.FinalizeSampleRunRequest
+	(*FinalizeSampleRunResponse)(nil),     // 23: ah.v1.FinalizeSampleRunResponse
+	(*EvaluateGCRequest)(nil),             // 24: ah.v1.EvaluateGCRequest
+	(*EvaluateGCResponse)(nil),            // 25: ah.v1.EvaluateGCResponse
+	(*GetSampleRunLifecycleRequest)(nil),  // 26: ah.v1.GetSampleRunLifecycleRequest
+	(*GetSampleRunLifecycleResponse)(nil), // 27: ah.v1.GetSampleRunLifecycleResponse
 }
 var file_ah_v1_proto_depIdxs = []int32{
 	8,  // 0: ah.v1.ArtifactRef.locations:type_name -> ah.v1.ArtifactLocation
@@ -1684,29 +2092,40 @@ var file_ah_v1_proto_depIdxs = []int32{
 	3,  // 2: ah.v1.ResolveHandoffRequest.binding:type_name -> ah.v1.ArtifactBinding
 	6,  // 3: ah.v1.ArtifactLocation.node_local:type_name -> ah.v1.NodeLocalLocation
 	7,  // 4: ah.v1.ArtifactLocation.http:type_name -> ah.v1.HttpSource
-	8,  // 5: ah.v1.MaterializationPlan.source_location:type_name -> ah.v1.ArtifactLocation
-	8,  // 6: ah.v1.MaterializationCandidate.source_location:type_name -> ah.v1.ArtifactLocation
-	10, // 7: ah.v1.MaterializationCandidate.conditions:type_name -> ah.v1.MaterializationCondition
-	5,  // 8: ah.v1.ResolveHandoffResponse.placement_intent:type_name -> ah.v1.PlacementIntent
-	9,  // 9: ah.v1.ResolveHandoffResponse.materialization_plan:type_name -> ah.v1.MaterializationPlan
-	11, // 10: ah.v1.ResolveHandoffResponse.materialization_candidates:type_name -> ah.v1.MaterializationCandidate
-	1,  // 11: ah.v1.ArtifactHandoffResolver.RegisterArtifact:input_type -> ah.v1.RegisterArtifactRequest
-	4,  // 12: ah.v1.ArtifactHandoffResolver.ResolveHandoff:input_type -> ah.v1.ResolveHandoffRequest
-	13, // 13: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:input_type -> ah.v1.NotifyNodeTerminalRequest
-	15, // 14: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:input_type -> ah.v1.FinalizeSampleRunRequest
-	17, // 15: ah.v1.ArtifactHandoffResolver.EvaluateGC:input_type -> ah.v1.EvaluateGCRequest
-	19, // 16: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:input_type -> ah.v1.GetSampleRunLifecycleRequest
-	2,  // 17: ah.v1.ArtifactHandoffResolver.RegisterArtifact:output_type -> ah.v1.RegisterArtifactResponse
-	12, // 18: ah.v1.ArtifactHandoffResolver.ResolveHandoff:output_type -> ah.v1.ResolveHandoffResponse
-	14, // 19: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:output_type -> ah.v1.NotifyNodeTerminalResponse
-	16, // 20: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:output_type -> ah.v1.FinalizeSampleRunResponse
-	18, // 21: ah.v1.ArtifactHandoffResolver.EvaluateGC:output_type -> ah.v1.EvaluateGCResponse
-	20, // 22: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:output_type -> ah.v1.GetSampleRunLifecycleResponse
-	17, // [17:23] is the sub-list for method output_type
-	11, // [11:17] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	8,  // 5: ah.v1.ArtifactSource.location:type_name -> ah.v1.ArtifactLocation
+	9,  // 6: ah.v1.AddSourceRequest.source:type_name -> ah.v1.ArtifactSource
+	9,  // 7: ah.v1.AddSourceResponse.source:type_name -> ah.v1.ArtifactSource
+	9,  // 8: ah.v1.UpdateSourceStateResponse.source:type_name -> ah.v1.ArtifactSource
+	9,  // 9: ah.v1.ListSourcesResponse.sources:type_name -> ah.v1.ArtifactSource
+	8,  // 10: ah.v1.MaterializationPlan.source_location:type_name -> ah.v1.ArtifactLocation
+	8,  // 11: ah.v1.MaterializationCandidate.source_location:type_name -> ah.v1.ArtifactLocation
+	17, // 12: ah.v1.MaterializationCandidate.conditions:type_name -> ah.v1.MaterializationCondition
+	5,  // 13: ah.v1.ResolveHandoffResponse.placement_intent:type_name -> ah.v1.PlacementIntent
+	16, // 14: ah.v1.ResolveHandoffResponse.materialization_plan:type_name -> ah.v1.MaterializationPlan
+	18, // 15: ah.v1.ResolveHandoffResponse.materialization_candidates:type_name -> ah.v1.MaterializationCandidate
+	1,  // 16: ah.v1.ArtifactHandoffResolver.RegisterArtifact:input_type -> ah.v1.RegisterArtifactRequest
+	10, // 17: ah.v1.ArtifactHandoffResolver.AddSource:input_type -> ah.v1.AddSourceRequest
+	12, // 18: ah.v1.ArtifactHandoffResolver.UpdateSourceState:input_type -> ah.v1.UpdateSourceStateRequest
+	14, // 19: ah.v1.ArtifactHandoffResolver.ListSources:input_type -> ah.v1.ListSourcesRequest
+	4,  // 20: ah.v1.ArtifactHandoffResolver.ResolveHandoff:input_type -> ah.v1.ResolveHandoffRequest
+	20, // 21: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:input_type -> ah.v1.NotifyNodeTerminalRequest
+	22, // 22: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:input_type -> ah.v1.FinalizeSampleRunRequest
+	24, // 23: ah.v1.ArtifactHandoffResolver.EvaluateGC:input_type -> ah.v1.EvaluateGCRequest
+	26, // 24: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:input_type -> ah.v1.GetSampleRunLifecycleRequest
+	2,  // 25: ah.v1.ArtifactHandoffResolver.RegisterArtifact:output_type -> ah.v1.RegisterArtifactResponse
+	11, // 26: ah.v1.ArtifactHandoffResolver.AddSource:output_type -> ah.v1.AddSourceResponse
+	13, // 27: ah.v1.ArtifactHandoffResolver.UpdateSourceState:output_type -> ah.v1.UpdateSourceStateResponse
+	15, // 28: ah.v1.ArtifactHandoffResolver.ListSources:output_type -> ah.v1.ListSourcesResponse
+	19, // 29: ah.v1.ArtifactHandoffResolver.ResolveHandoff:output_type -> ah.v1.ResolveHandoffResponse
+	21, // 30: ah.v1.ArtifactHandoffResolver.NotifyNodeTerminal:output_type -> ah.v1.NotifyNodeTerminalResponse
+	23, // 31: ah.v1.ArtifactHandoffResolver.FinalizeSampleRun:output_type -> ah.v1.FinalizeSampleRunResponse
+	25, // 32: ah.v1.ArtifactHandoffResolver.EvaluateGC:output_type -> ah.v1.EvaluateGCResponse
+	27, // 33: ah.v1.ArtifactHandoffResolver.GetSampleRunLifecycle:output_type -> ah.v1.GetSampleRunLifecycleResponse
+	25, // [25:34] is the sub-list for method output_type
+	16, // [16:25] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_ah_v1_proto_init() }
@@ -1724,7 +2143,7 @@ func file_ah_v1_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ah_v1_proto_rawDesc), len(file_ah_v1_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

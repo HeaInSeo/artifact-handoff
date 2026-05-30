@@ -14,8 +14,10 @@ import (
 type Store interface {
 	PutArtifact(ctx context.Context, artifact domain.Artifact) error
 	GetArtifact(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error)
+	GetArtifactByID(ctx context.Context, artifactID string) (domain.Artifact, bool, error)
 	ListArtifactsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.Artifact, error)
 	PutArtifactSources(ctx context.Context, artifactID string, sources []domain.ArtifactSource) error
+	GetArtifactSource(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, error)
 	ListArtifactSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error)
 	ListNodeTerminalsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.NodeTerminalRecord, error)
 	RecordNodeTerminal(ctx context.Context, record domain.NodeTerminalRecord) error
