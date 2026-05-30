@@ -2250,6 +2250,136 @@ func TestHTTPAddSourceAndUpdateState(t *testing.T) {
 	}
 }
 
+func TestVerifySourcePromotesValidSourceToReady(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-verify-ready/producer-a/attempt-1/dataset"
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-verify-ready",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	source, err := service.AddSource(context.Background(), artifactID, domain.ArtifactSource{
+		BackendID: "legacy-http",
+		State:     domain.SourceStateStale,
+		Location: domain.Location{
+			HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/abc123"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSource() error = %v", err)
+	}
+
+	verified, ok, reason, err := service.VerifySource(context.Background(), source.SourceID)
+	if err != nil {
+		t.Fatalf("VerifySource() error = %v", err)
+	}
+	if !ok || reason != "" {
+		t.Fatalf("VerifySource() = ok=%v reason=%q, want ok=true empty reason", ok, reason)
+	}
+	if verified.State != domain.SourceStateReady {
+		t.Fatalf("verified.State = %q, want ready", verified.State)
+	}
+	if verified.LastVerifiedAt.IsZero() {
+		t.Fatalf("verified.LastVerifiedAt = zero, want populated")
+	}
+	if verified.LastError != "" {
+		t.Fatalf("verified.LastError = %q, want empty", verified.LastError)
+	}
+}
+
+func TestVerifySourceMarksInvalidSourceUnreachable(t *testing.T) {
+	t.Setenv("AH_ALLOWED_HTTP_SOURCE_HOSTS", "artifact-source.local")
+
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-verify-bad/producer-a/attempt-1/dataset"
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-verify-bad",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	source, err := service.AddSource(context.Background(), artifactID, domain.ArtifactSource{
+		BackendID: "legacy-http",
+		Location: domain.Location{
+			HTTP: &domain.HTTPSource{URI: "http://disallowed.example/artifacts/abc123"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSource() error = %v", err)
+	}
+
+	verified, ok, reason, err := service.VerifySource(context.Background(), source.SourceID)
+	if err != nil {
+		t.Fatalf("VerifySource() error = %v", err)
+	}
+	if ok {
+		t.Fatalf("VerifySource() ok = true, want false")
+	}
+	if verified.State != domain.SourceStateUnreachable {
+		t.Fatalf("verified.State = %q, want unreachable", verified.State)
+	}
+	if reason == "" || verified.LastError == "" {
+		t.Fatalf("reason=%q lastError=%q, want non-empty", reason, verified.LastError)
+	}
+}
+
+func TestHTTPVerifySource(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	artifactID := "sample-http-verify/producer-a/attempt-1/dataset"
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-http-verify",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	source, err := service.AddSource(context.Background(), artifactID, domain.ArtifactSource{
+		BackendID: "legacy-http",
+		State:     domain.SourceStateStale,
+		Location: domain.Location{
+			HTTP: &domain.HTTPSource{URI: "http://artifact-source.local/artifacts/abc123"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("AddSource() error = %v", err)
+	}
+
+	handler := NewHTTPHandler(service)
+	verifyReq := httptest.NewRequest(http.MethodPost, "/v1/sources:verify", strings.NewReader(`{"sourceId":"`+source.SourceID+`"}`))
+	verifyReq.Header.Set("Content-Type", "application/json")
+	verifyRec := httptest.NewRecorder()
+	handler.ServeHTTP(verifyRec, verifyReq)
+	if verifyRec.Code != http.StatusOK {
+		t.Fatalf("verify source status = %d, body=%s", verifyRec.Code, verifyRec.Body.String())
+	}
+	var body struct {
+		Source   domain.ArtifactSource `json:"source"`
+		Verified bool                  `json:"verified"`
+		Reason   string                `json:"reason"`
+	}
+	if err := json.Unmarshal(verifyRec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode verify source body: %v", err)
+	}
+	if !body.Verified || body.Source.State != domain.SourceStateReady {
+		t.Fatalf("verify body = %+v, want verified ready source", body)
+	}
+}
+
 func TestResolveHandoffPlanningMode_IgnoresHTTPSourceOutsideAllowlist(t *testing.T) {
 	t.Setenv("AH_ALLOWED_HTTP_SOURCE_HOSTS", "artifact-source.local")
 

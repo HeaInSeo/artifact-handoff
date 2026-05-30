@@ -81,6 +81,8 @@ message ArtifactSource {
   string state = 5;
   string location_fingerprint = 6;
   ArtifactLocation location = 7;
+  string last_verified_at = 8;
+  string last_error = 9;
 }
 
 message AddSourceRequest {
@@ -107,6 +109,16 @@ message ListSourcesRequest {
 
 message ListSourcesResponse {
   repeated ArtifactSource sources = 1;
+}
+
+message VerifySourceRequest {
+  string source_id = 1;
+}
+
+message VerifySourceResponse {
+  ArtifactSource source = 1;
+  bool verified = 2;
+  string reason = 3;
 }
 
 message MaterializationPlan {
@@ -206,6 +218,7 @@ service ArtifactHandoffResolver {
   rpc AddSource(AddSourceRequest) returns (AddSourceResponse);
   rpc UpdateSourceState(UpdateSourceStateRequest) returns (UpdateSourceStateResponse);
   rpc ListSources(ListSourcesRequest) returns (ListSourcesResponse);
+  rpc VerifySource(VerifySourceRequest) returns (VerifySourceResponse);
   rpc ResolveHandoff(ResolveHandoffRequest) returns (ResolveHandoffResponse);
   rpc NotifyNodeTerminal(NotifyNodeTerminalRequest) returns (NotifyNodeTerminalResponse);
   rpc FinalizeSampleRun(FinalizeSampleRunRequest) returns (FinalizeSampleRunResponse);

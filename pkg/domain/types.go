@@ -227,6 +227,8 @@ type ArtifactSource struct {
 	Location            Location    `json:"location"`
 	CreatedAt           time.Time   `json:"createdAt,omitempty"`
 	UpdatedAt           time.Time   `json:"updatedAt,omitempty"`
+	LastVerifiedAt      time.Time   `json:"lastVerifiedAt,omitempty"`
+	LastError           string      `json:"lastError,omitempty"`
 }
 
 func BackendTypeForID(backendID string) SourceBackendType {

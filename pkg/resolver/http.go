@@ -147,6 +147,29 @@ func NewHTTPHandler(service *Service) http.Handler {
 		}
 		writeJSON(w, map[string]domain.ArtifactSource{"source": source})
 	})
+	mux.HandleFunc("/v1/sources:verify", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req struct {
+			SourceID string `json:"sourceId"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		source, verified, reason, err := service.VerifySourceCore(r.Context(), req.SourceID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string]any{
+			"source":   source,
+			"verified": verified,
+			"reason":   reason,
+		})
+	})
 	mux.HandleFunc("/v1/handoffs:resolve", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

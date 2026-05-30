@@ -67,6 +67,18 @@ func (s *grpcResolverServer) ListSources(ctx context.Context, req *ahv1.ListSour
 	return &ahv1.ListSourcesResponse{Sources: grpcSourcesFromDomain(sources)}, nil
 }
 
+func (s *grpcResolverServer) VerifySource(ctx context.Context, req *ahv1.VerifySourceRequest) (*ahv1.VerifySourceResponse, error) {
+	source, verified, reason, err := s.service.VerifySourceCore(ctx, req.GetSourceId())
+	if err != nil {
+		return nil, err
+	}
+	return &ahv1.VerifySourceResponse{
+		Source:   grpcSourceFromDomain(source),
+		Verified: verified,
+		Reason:   reason,
+	}, nil
+}
+
 func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.ResolveHandoffRequest) (*ahv1.ResolveHandoffResponse, error) {
 	s.service.Metrics().IncGRPCResolveHandoff()
 	binding := req.GetBinding()
@@ -274,6 +286,10 @@ func grpcSourceToDomain(source *ahv1.ArtifactSource) domain.ArtifactSource {
 }
 
 func grpcSourceFromDomain(source domain.ArtifactSource) *ahv1.ArtifactSource {
+	lastVerifiedAt := ""
+	if !source.LastVerifiedAt.IsZero() {
+		lastVerifiedAt = source.LastVerifiedAt.UTC().Format(time.RFC3339Nano)
+	}
 	return &ahv1.ArtifactSource{
 		SourceId:            source.SourceID,
 		ArtifactId:          source.ArtifactID,
@@ -282,6 +298,8 @@ func grpcSourceFromDomain(source domain.ArtifactSource) *ahv1.ArtifactSource {
 		State:               string(source.State),
 		LocationFingerprint: source.LocationFingerprint,
 		Location:            grpcLocationFromDomain(&source.Location),
+		LastVerifiedAt:      lastVerifiedAt,
+		LastError:           source.LastError,
 	}
 }
 

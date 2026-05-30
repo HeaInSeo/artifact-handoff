@@ -80,7 +80,9 @@ func sqliteMigrate(db *sql.DB) error {
 			location_fingerprint  TEXT NOT NULL DEFAULT '',
 			location_json         TEXT NOT NULL,
 			created_at            TEXT NOT NULL,
-			updated_at            TEXT NOT NULL
+			updated_at            TEXT NOT NULL,
+			last_verified_at      TEXT NOT NULL DEFAULT '',
+			last_error            TEXT NOT NULL DEFAULT ''
 		);
 		CREATE TABLE IF NOT EXISTS node_terminals (
 			key            TEXT PRIMARY KEY,
@@ -114,6 +116,8 @@ func sqliteMigrate(db *sql.DB) error {
 	for _, stmt := range []string{
 		`ALTER TABLE artifacts ADD COLUMN logical_uri TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE artifacts ADD COLUMN locations_json TEXT NOT NULL DEFAULT '[]'`,
+		`ALTER TABLE artifact_sources ADD COLUMN last_verified_at TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE artifact_sources ADD COLUMN last_error TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.Exec(stmt); err != nil && !isDuplicateColumn(err) {
 			return err
@@ -128,7 +132,9 @@ func isDuplicateColumn(err error) bool {
 	}
 	msg := err.Error()
 	return msg == "SQL logic error: duplicate column name: logical_uri (1)" ||
-		msg == "SQL logic error: duplicate column name: locations_json (1)"
+		msg == "SQL logic error: duplicate column name: locations_json (1)" ||
+		msg == "SQL logic error: duplicate column name: last_verified_at (1)" ||
+		msg == "SQL logic error: duplicate column name: last_error (1)"
 }
 
 func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error {
@@ -288,12 +294,14 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO artifact_sources (
 				source_id, artifact_id, backend_id, digest, state,
-				location_fingerprint, location_json, created_at, updated_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+				location_fingerprint, location_json, created_at, updated_at, last_verified_at, last_error
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(source_id) DO UPDATE SET
 				state = excluded.state,
 				location_json = excluded.location_json,
-				updated_at = excluded.updated_at`,
+				updated_at = excluded.updated_at,
+				last_verified_at = excluded.last_verified_at,
+				last_error = excluded.last_error`,
 			source.SourceID,
 			source.ArtifactID,
 			source.BackendID,
@@ -303,6 +311,8 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 			marshalLocation(source.Location),
 			timeToStr(source.CreatedAt),
 			timeToStr(source.UpdatedAt),
+			timeToStr(source.LastVerifiedAt),
+			source.LastError,
 		); err != nil {
 			return err
 		}
@@ -313,7 +323,7 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 func (s *SQLiteStore) ListArtifactSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT source_id, artifact_id, backend_id, digest, state,
-		       location_fingerprint, location_json, created_at, updated_at
+		       location_fingerprint, location_json, created_at, updated_at, last_verified_at, last_error
 		FROM artifact_sources
 		WHERE artifact_id = ?
 		ORDER BY source_id ASC`, artifactID)
@@ -326,16 +336,17 @@ func (s *SQLiteStore) ListArtifactSources(ctx context.Context, artifactID string
 		var source domain.ArtifactSource
 		var state string
 		var locationJSON string
-		var createdAt, updatedAt string
+		var createdAt, updatedAt, lastVerifiedAt string
 		if err := rows.Scan(
 			&source.SourceID, &source.ArtifactID, &source.BackendID, &source.Digest,
-			&state, &source.LocationFingerprint, &locationJSON, &createdAt, &updatedAt,
+			&state, &source.LocationFingerprint, &locationJSON, &createdAt, &updatedAt, &lastVerifiedAt, &source.LastError,
 		); err != nil {
 			return nil, err
 		}
 		source.State = domain.SourceState(state)
 		source.CreatedAt, _ = parseTimeStr(createdAt)
 		source.UpdatedAt, _ = parseTimeStr(updatedAt)
+		source.LastVerifiedAt, _ = parseTimeStr(lastVerifiedAt)
 		if err := json.Unmarshal([]byte(locationJSON), &source.Location); err != nil {
 			return nil, fmt.Errorf("unmarshal location_json: %w", err)
 		}
@@ -347,16 +358,16 @@ func (s *SQLiteStore) ListArtifactSources(ctx context.Context, artifactID string
 func (s *SQLiteStore) GetArtifactSource(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT source_id, artifact_id, backend_id, digest, state,
-		       location_fingerprint, location_json, created_at, updated_at
+		       location_fingerprint, location_json, created_at, updated_at, last_verified_at, last_error
 		FROM artifact_sources
 		WHERE source_id = ?`, sourceID)
 	var source domain.ArtifactSource
 	var state string
 	var locationJSON string
-	var createdAt, updatedAt string
+	var createdAt, updatedAt, lastVerifiedAt string
 	err := row.Scan(
 		&source.SourceID, &source.ArtifactID, &source.BackendID, &source.Digest,
-		&state, &source.LocationFingerprint, &locationJSON, &createdAt, &updatedAt,
+		&state, &source.LocationFingerprint, &locationJSON, &createdAt, &updatedAt, &lastVerifiedAt, &source.LastError,
 	)
 	if err == sql.ErrNoRows {
 		return domain.ArtifactSource{}, false, nil
@@ -367,6 +378,7 @@ func (s *SQLiteStore) GetArtifactSource(ctx context.Context, sourceID string) (d
 	source.State = domain.SourceState(state)
 	source.CreatedAt, _ = parseTimeStr(createdAt)
 	source.UpdatedAt, _ = parseTimeStr(updatedAt)
+	source.LastVerifiedAt, _ = parseTimeStr(lastVerifiedAt)
 	if err := json.Unmarshal([]byte(locationJSON), &source.Location); err != nil {
 		return domain.ArtifactSource{}, false, fmt.Errorf("unmarshal location_json: %w", err)
 	}

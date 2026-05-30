@@ -89,6 +89,10 @@ func (s *Service) UpdateSourceState(ctx context.Context, sourceID string, state 
 	return s.UpdateSourceStateCore(ctx, sourceID, state)
 }
 
+func (s *Service) VerifySource(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, string, error) {
+	return s.VerifySourceCore(ctx, sourceID)
+}
+
 func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Artifact) (domain.AvailabilityState, error) {
 	if artifact.SampleRunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
 		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
@@ -259,6 +263,61 @@ func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, st
 		return domain.ArtifactSource{}, err
 	}
 	return stored, nil
+}
+
+func (s *Service) VerifySourceCore(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, string, error) {
+	if strings.TrimSpace(sourceID) == "" {
+		return domain.ArtifactSource{}, false, "", fmt.Errorf("sourceID is required")
+	}
+	source, ok, err := s.store.GetArtifactSource(ctx, sourceID)
+	if err != nil {
+		return domain.ArtifactSource{}, false, "", err
+	}
+	if !ok {
+		return domain.ArtifactSource{}, false, "", fmt.Errorf("source %q not found", sourceID)
+	}
+	if source.State == domain.SourceStateDeleted {
+		return source, false, "deleted sources are not verifiable", fmt.Errorf("source %q is deleted", sourceID)
+	}
+	artifact, ok, err := s.store.GetArtifactByID(ctx, source.ArtifactID)
+	if err != nil {
+		return domain.ArtifactSource{}, false, "", err
+	}
+	if !ok {
+		return domain.ArtifactSource{}, false, "", fmt.Errorf("artifact %q not found", source.ArtifactID)
+	}
+	now := s.now()
+	reason := ""
+	verifyErr := domain.ValidateArtifactSourceForArtifact(artifact, source)
+	if verifyErr == nil {
+		verifyErr = validateCandidateSource(source, s.httpAllowedHosts, s.allowAnyHTTPSource)
+	}
+	if verifyErr != nil {
+		source.State = domain.SourceStateUnreachable
+		source.LastError = verifyErr.Error()
+		source.LastVerifiedAt = now
+		source.UpdatedAt = now
+		if err := s.store.PutArtifactSources(ctx, source.ArtifactID, []domain.ArtifactSource{source}); err != nil {
+			return domain.ArtifactSource{}, false, "", err
+		}
+		stored, _, err := s.store.GetArtifactSource(ctx, source.SourceID)
+		if err != nil {
+			return domain.ArtifactSource{}, false, "", err
+		}
+		return stored, false, source.LastError, nil
+	}
+	source.State = domain.SourceStateReady
+	source.LastError = ""
+	source.LastVerifiedAt = now
+	source.UpdatedAt = now
+	if err := s.store.PutArtifactSources(ctx, source.ArtifactID, []domain.ArtifactSource{source}); err != nil {
+		return domain.ArtifactSource{}, false, "", err
+	}
+	stored, _, err := s.store.GetArtifactSource(ctx, source.SourceID)
+	if err != nil {
+		return domain.ArtifactSource{}, false, "", err
+	}
+	return stored, true, reason, nil
 }
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
