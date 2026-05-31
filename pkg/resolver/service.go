@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -95,10 +96,10 @@ func (s *Service) VerifySource(ctx context.Context, sourceID string) (domain.Art
 
 func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Artifact) (domain.AvailabilityState, error) {
 	if artifact.SampleRunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
-		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
+		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required: %w", ErrInvalidArgument)
 	}
 	if artifact.ProducerAttemptID == "" {
-		return "", fmt.Errorf("producerAttemptID is required")
+		return "", fmt.Errorf("producerAttemptID is required: %w", ErrInvalidArgument)
 	}
 	if artifact.CreatedAt.IsZero() {
 		artifact.CreatedAt = s.now()
@@ -108,7 +109,7 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	if artifact.ArtifactID == "" {
 		artifact.ArtifactID = canonical
 	} else if artifact.ArtifactID != canonical {
-		return "", fmt.Errorf("artifactID %q does not match canonical ID %q", artifact.ArtifactID, canonical)
+		return "", fmt.Errorf("artifactID %q does not match canonical ID %q: %w", artifact.ArtifactID, canonical, ErrInvalidArgument)
 	}
 	// Enforce artifact immutability: same key + same digest = idempotent OK;
 	// same key + different digest, or clearing an existing digest = conflict error.
@@ -118,12 +119,12 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	}
 	if exists && existing.Digest != "" {
 		if artifact.Digest == "" {
-			return "", fmt.Errorf("artifact %s already registered with digest %s; refusing to clear digest",
-				artifact.Key(), existing.Digest)
+			return "", fmt.Errorf("artifact %s already registered with digest %s; refusing to clear digest: %w",
+				artifact.Key(), existing.Digest, ErrAlreadyExists)
 		}
 		if artifact.Digest != existing.Digest {
-			return "", fmt.Errorf("artifact %s already registered with digest %s; rejecting re-registration with digest %s",
-				artifact.Key(), existing.Digest, artifact.Digest)
+			return "", fmt.Errorf("artifact %s already registered with digest %s; rejecting re-registration with digest %s: %w",
+				artifact.Key(), existing.Digest, artifact.Digest, ErrAlreadyExists)
 		}
 	}
 	if err := domain.ValidateArtifactForRegistration(artifact); err != nil {
@@ -161,24 +162,24 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 
 func (s *Service) GetArtifactCore(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
 	if sampleRunID == "" || producerNodeID == "" || outputName == "" {
-		return domain.Artifact{}, false, fmt.Errorf("sampleRunID, producerNodeID, outputName are required")
+		return domain.Artifact{}, false, fmt.Errorf("sampleRunID, producerNodeID, outputName are required: %w", ErrInvalidArgument)
 	}
 	if attemptID == "" {
-		return domain.Artifact{}, false, fmt.Errorf("attemptID is required")
+		return domain.Artifact{}, false, fmt.Errorf("attemptID is required: %w", ErrInvalidArgument)
 	}
 	return s.store.GetArtifact(ctx, sampleRunID, producerNodeID, attemptID, outputName)
 }
 
 func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
 	if sampleRunID == "" {
-		return nil, fmt.Errorf("sampleRunID is required")
+		return nil, fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
 	}
 	return s.store.ListArtifactsBySampleRun(ctx, sampleRunID)
 }
 
 func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
 	if artifactID == "" {
-		return nil, fmt.Errorf("artifactID is required")
+		return nil, fmt.Errorf("artifactID is required: %w", ErrInvalidArgument)
 	}
 	sources, err := s.store.ListArtifactSources(ctx, artifactID)
 	if err != nil {
@@ -196,14 +197,14 @@ func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]dom
 
 func (s *Service) AddSourceCore(ctx context.Context, artifactID string, source domain.ArtifactSource) (domain.ArtifactSource, error) {
 	if strings.TrimSpace(artifactID) == "" {
-		return domain.ArtifactSource{}, fmt.Errorf("artifactID is required")
+		return domain.ArtifactSource{}, fmt.Errorf("artifactID is required: %w", ErrInvalidArgument)
 	}
 	artifact, ok, err := s.store.GetArtifactByID(ctx, artifactID)
 	if err != nil {
 		return domain.ArtifactSource{}, err
 	}
 	if !ok {
-		return domain.ArtifactSource{}, fmt.Errorf("artifact %q not found", artifactID)
+		return domain.ArtifactSource{}, fmt.Errorf("artifact %q not found: %w", artifactID, ErrNotFound)
 	}
 	source.ArtifactID = artifactID
 	if strings.TrimSpace(source.Digest) == "" {
@@ -241,7 +242,7 @@ func (s *Service) AddSourceCore(ctx context.Context, artifactID string, source d
 
 func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, state domain.SourceState) (domain.ArtifactSource, error) {
 	if strings.TrimSpace(sourceID) == "" {
-		return domain.ArtifactSource{}, fmt.Errorf("sourceID is required")
+		return domain.ArtifactSource{}, fmt.Errorf("sourceID is required: %w", ErrInvalidArgument)
 	}
 	if err := state.Validate(); err != nil {
 		return domain.ArtifactSource{}, err
@@ -251,7 +252,7 @@ func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, st
 		return domain.ArtifactSource{}, err
 	}
 	if !ok {
-		return domain.ArtifactSource{}, fmt.Errorf("source %q not found", sourceID)
+		return domain.ArtifactSource{}, fmt.Errorf("source %q not found: %w", sourceID, ErrNotFound)
 	}
 	source.State = state
 	source.UpdatedAt = s.now()
@@ -267,24 +268,24 @@ func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, st
 
 func (s *Service) VerifySourceCore(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, string, error) {
 	if strings.TrimSpace(sourceID) == "" {
-		return domain.ArtifactSource{}, false, "", fmt.Errorf("sourceID is required")
+		return domain.ArtifactSource{}, false, "", fmt.Errorf("sourceID is required: %w", ErrInvalidArgument)
 	}
 	source, ok, err := s.store.GetArtifactSource(ctx, sourceID)
 	if err != nil {
 		return domain.ArtifactSource{}, false, "", err
 	}
 	if !ok {
-		return domain.ArtifactSource{}, false, "", fmt.Errorf("source %q not found", sourceID)
+		return domain.ArtifactSource{}, false, "", fmt.Errorf("source %q not found: %w", sourceID, ErrNotFound)
 	}
 	if source.State == domain.SourceStateDeleted {
-		return source, false, "deleted sources are not verifiable", fmt.Errorf("source %q is deleted", sourceID)
+		return source, false, "deleted sources are not verifiable", fmt.Errorf("source %q is deleted: %w", sourceID, ErrFailedPrecondition)
 	}
 	artifact, ok, err := s.store.GetArtifactByID(ctx, source.ArtifactID)
 	if err != nil {
 		return domain.ArtifactSource{}, false, "", err
 	}
 	if !ok {
-		return domain.ArtifactSource{}, false, "", fmt.Errorf("artifact %q not found", source.ArtifactID)
+		return domain.ArtifactSource{}, false, "", fmt.Errorf("artifact %q not found: %w", source.ArtifactID, ErrNotFound)
 	}
 	now := s.now()
 	reason := ""
@@ -323,10 +324,10 @@ func (s *Service) VerifySourceCore(ctx context.Context, sourceID string) (domain
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
 	s.metrics.IncResolveRequests()
 	if binding.SampleRunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
-		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required")
+		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required: %w", ErrInvalidArgument)
 	}
 	if binding.ProducerAttemptID == "" {
-		return domain.ResolvedHandoff{}, fmt.Errorf("binding producerAttemptID is required")
+		return domain.ResolvedHandoff{}, fmt.Errorf("binding producerAttemptID is required: %w", ErrInvalidArgument)
 	}
 	if err := binding.ConsumePolicy.Validate(); err != nil {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding %s: %w", binding.BindingName, err)
@@ -780,34 +781,34 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 	}
 	parsed, err := url.Parse(source.Location.HTTP.URI)
 	if err != nil {
-		return fmt.Errorf("invalid http source uri: %w", err)
+		return fmt.Errorf("invalid http source uri: %w", errors.Join(err, ErrInvalidArgument))
 	}
 	switch parsed.Scheme {
 	case "http", "https":
 	default:
-		return fmt.Errorf("unsupported http source scheme %q", parsed.Scheme)
+		return fmt.Errorf("unsupported http source scheme %q: %w", parsed.Scheme, ErrInvalidArgument)
 	}
 	if parsed.User != nil {
-		return fmt.Errorf("http source uri must not contain userinfo")
+		return fmt.Errorf("http source uri must not contain userinfo: %w", ErrInvalidArgument)
 	}
 	host := strings.TrimSpace(parsed.Hostname())
 	if host == "" {
-		return fmt.Errorf("http source host is required")
+		return fmt.Errorf("http source host is required: %w", ErrInvalidArgument)
 	}
 	if parsed.RawQuery != "" {
-		return fmt.Errorf("http source uri must not contain query string")
+		return fmt.Errorf("http source uri must not contain query string: %w", ErrInvalidArgument)
 	}
 	if len(allowedHosts) == 0 && !allowAny {
-		return fmt.Errorf("http source allowlist is required")
+		return fmt.Errorf("http source allowlist is required: %w", ErrInvalidArgument)
 	}
 	if len(allowedHosts) != 0 {
 		if _, ok := allowedHosts[strings.ToLower(host)]; !ok {
-			return fmt.Errorf("http source host %q is not in allowlist", host)
+			return fmt.Errorf("http source host %q is not in allowlist: %w", host, ErrInvalidArgument)
 		}
 	}
 	if ip := net.ParseIP(host); ip != nil {
 		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() {
-			return fmt.Errorf("http source host %q is not allowed", host)
+			return fmt.Errorf("http source host %q is not allowed: %w", host, ErrInvalidArgument)
 		}
 	}
 	return nil
@@ -875,15 +876,15 @@ func hasAnyNodeLocalSource(sources []domain.ArtifactSource) bool {
 
 func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {
 	if sampleRunID == "" || nodeID == "" || terminalState == "" {
-		return fmt.Errorf("sampleRunID, nodeID, terminalState are required")
+		return fmt.Errorf("sampleRunID, nodeID, terminalState are required: %w", ErrInvalidArgument)
 	}
 	if attemptID == "" {
-		return fmt.Errorf("attemptID is required")
+		return fmt.Errorf("attemptID is required: %w", ErrInvalidArgument)
 	}
 	switch terminalState {
 	case "Succeeded", "Failed", "Canceled":
 	default:
-		return fmt.Errorf("unsupported terminalState %q", terminalState)
+		return fmt.Errorf("unsupported terminalState %q: %w", terminalState, ErrInvalidArgument)
 	}
 	return s.store.RecordNodeTerminal(ctx, domain.NodeTerminalRecord{
 		SampleRunID:   sampleRunID,
@@ -896,7 +897,7 @@ func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeI
 
 func (s *Service) FinalizeSampleRunCore(ctx context.Context, sampleRunID string) error {
 	if sampleRunID == "" {
-		return fmt.Errorf("sampleRunID is required")
+		return fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
 	}
 	now := s.now()
 	lifecycle, ok, err := s.store.GetSampleRunLifecycle(ctx, sampleRunID)
@@ -927,7 +928,7 @@ func (s *Service) FinalizeSampleRunCore(ctx context.Context, sampleRunID string)
 
 func (s *Service) EvaluateGCCore(ctx context.Context, sampleRunID string) error {
 	if sampleRunID == "" {
-		return fmt.Errorf("sampleRunID is required")
+		return fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
 	}
 	lifecycle, ok, err := s.store.GetSampleRunLifecycle(ctx, sampleRunID)
 	if err != nil {
@@ -968,14 +969,14 @@ func (s *Service) EvaluateGCCore(ctx context.Context, sampleRunID string) error 
 
 func (s *Service) GetSampleRunLifecycleCore(ctx context.Context, sampleRunID string) (domain.SampleRunLifecycle, bool, error) {
 	if sampleRunID == "" {
-		return domain.SampleRunLifecycle{}, false, fmt.Errorf("sampleRunID is required")
+		return domain.SampleRunLifecycle{}, false, fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
 	}
 	return s.store.GetSampleRunLifecycle(ctx, sampleRunID)
 }
 
 func (s *Service) refreshLifecycleSnapshot(ctx context.Context, lifecycle *domain.SampleRunLifecycle) error {
 	if lifecycle == nil {
-		return fmt.Errorf("lifecycle is required")
+		return fmt.Errorf("lifecycle is required: %w", ErrInvalidArgument)
 	}
 	artifacts, err := s.store.ListArtifactsBySampleRun(ctx, lifecycle.SampleRunID)
 	if err != nil {

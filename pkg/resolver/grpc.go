@@ -2,6 +2,7 @@ package resolver
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	ahv1 "github.com/HeaInSeo/artifact-handoff/api/proto/ahv1"
@@ -18,6 +19,24 @@ type grpcResolverServer struct {
 
 func RegisterGRPCService(server grpc.ServiceRegistrar, service *Service) {
 	ahv1.RegisterArtifactHandoffResolverServer(server, &grpcResolverServer{service: service})
+}
+
+func toGRPCError(err error) error {
+	if err == nil {
+		return nil
+	}
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, ErrInvalidArgument):
+		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, ErrAlreadyExists):
+		return status.Error(codes.AlreadyExists, err.Error())
+	case errors.Is(err, ErrFailedPrecondition):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	default:
+		return status.Error(codes.Internal, err.Error())
+	}
 }
 
 func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.RegisterArtifactRequest) (*ahv1.RegisterArtifactResponse, error) {
@@ -38,7 +57,7 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 	})
 	if err != nil {
 		s.service.Metrics().IncGRPCRegisterArtifactErrors()
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.RegisterArtifactResponse{AvailabilityState: string(state)}, nil
 }
@@ -46,7 +65,7 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 func (s *grpcResolverServer) AddSource(ctx context.Context, req *ahv1.AddSourceRequest) (*ahv1.AddSourceResponse, error) {
 	source, err := s.service.AddSourceCore(ctx, req.GetArtifactId(), grpcSourceToDomain(req.GetSource()))
 	if err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.AddSourceResponse{Source: grpcSourceFromDomain(source)}, nil
 }
@@ -54,7 +73,7 @@ func (s *grpcResolverServer) AddSource(ctx context.Context, req *ahv1.AddSourceR
 func (s *grpcResolverServer) UpdateSourceState(ctx context.Context, req *ahv1.UpdateSourceStateRequest) (*ahv1.UpdateSourceStateResponse, error) {
 	source, err := s.service.UpdateSourceStateCore(ctx, req.GetSourceId(), domain.SourceState(req.GetState()))
 	if err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.UpdateSourceStateResponse{Source: grpcSourceFromDomain(source)}, nil
 }
@@ -62,7 +81,7 @@ func (s *grpcResolverServer) UpdateSourceState(ctx context.Context, req *ahv1.Up
 func (s *grpcResolverServer) ListSources(ctx context.Context, req *ahv1.ListSourcesRequest) (*ahv1.ListSourcesResponse, error) {
 	sources, err := s.service.ListSourcesCore(ctx, req.GetArtifactId())
 	if err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.ListSourcesResponse{Sources: grpcSourcesFromDomain(sources)}, nil
 }
@@ -70,7 +89,7 @@ func (s *grpcResolverServer) ListSources(ctx context.Context, req *ahv1.ListSour
 func (s *grpcResolverServer) VerifySource(ctx context.Context, req *ahv1.VerifySourceRequest) (*ahv1.VerifySourceResponse, error) {
 	source, verified, reason, err := s.service.VerifySourceCore(ctx, req.GetSourceId())
 	if err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.VerifySourceResponse{
 		Source:   grpcSourceFromDomain(source),
@@ -98,7 +117,7 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 	}, req.GetTargetNodeName())
 	if err != nil {
 		s.service.Metrics().IncGRPCResolveHandoffErrors()
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.ResolveHandoffResponse{
 		ResolutionStatus: string(resolved.Status),
@@ -124,7 +143,7 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 func (s *grpcResolverServer) NotifyNodeTerminal(ctx context.Context, req *ahv1.NotifyNodeTerminalRequest) (*ahv1.NotifyNodeTerminalResponse, error) {
 	s.service.Metrics().IncGRPCNotifyNodeTerminal()
 	if err := s.service.NotifyNodeTerminalCore(ctx, req.GetSampleRunId(), req.GetNodeId(), req.GetAttemptId(), req.GetTerminalState()); err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.NotifyNodeTerminalResponse{Accepted: true}, nil
 }
@@ -132,7 +151,7 @@ func (s *grpcResolverServer) NotifyNodeTerminal(ctx context.Context, req *ahv1.N
 func (s *grpcResolverServer) FinalizeSampleRun(ctx context.Context, req *ahv1.FinalizeSampleRunRequest) (*ahv1.FinalizeSampleRunResponse, error) {
 	s.service.Metrics().IncGRPCFinalizeSampleRun()
 	if err := s.service.FinalizeSampleRunCore(ctx, req.GetSampleRunId()); err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.FinalizeSampleRunResponse{Accepted: true}, nil
 }
@@ -140,7 +159,7 @@ func (s *grpcResolverServer) FinalizeSampleRun(ctx context.Context, req *ahv1.Fi
 func (s *grpcResolverServer) EvaluateGC(ctx context.Context, req *ahv1.EvaluateGCRequest) (*ahv1.EvaluateGCResponse, error) {
 	s.service.Metrics().IncGRPCEvaluateGC()
 	if err := s.service.EvaluateGCCore(ctx, req.GetSampleRunId()); err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	return &ahv1.EvaluateGCResponse{Accepted: true}, nil
 }
@@ -149,7 +168,7 @@ func (s *grpcResolverServer) GetSampleRunLifecycle(ctx context.Context, req *ahv
 	s.service.Metrics().IncGRPCGetLifecycle()
 	lifecycle, ok, err := s.service.GetSampleRunLifecycleCore(ctx, req.GetSampleRunId())
 	if err != nil {
-		return nil, err
+		return nil, toGRPCError(err)
 	}
 	if !ok {
 		return nil, status.Error(codes.NotFound, "sample run lifecycle not found")
