@@ -20,7 +20,12 @@ PKGS_CORE := ./api/... ./cmd/... ./pkg/...
 PKGS_COVER := ./cmd/... ./pkg/...
 PKGS_SECURITY := ./cmd/... ./pkg/...
 
-.PHONY: test test-regression coverage fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck buf proto proto-check
+REMOTE_SSH_TARGET ?= seoy@100.123.80.48
+REGISTRY_HOST ?= harbor.10.113.24.96.nip.io
+PREFLIGHT_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/preflight-ko-remote.sh
+PUBLISH_AH_RESOLVER_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/publish-ah-resolver-ko-remote.sh
+
+.PHONY: test test-regression coverage fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
 
 test:
 	go test $(PKGS_ALL)
@@ -115,3 +120,9 @@ proto-check: buf
 	$(BUF) breaking --against '.git#branch=main'
 	$(BUF) generate
 	git diff --exit-code -- api/proto/ahv1/
+
+preflight-ko-remote:
+	REMOTE_SSH_TARGET="$(REMOTE_SSH_TARGET)" REGISTRY_HOST="$(REGISTRY_HOST)" "$(PREFLIGHT_KO_REMOTE_SCRIPT)"
+
+ko-publish-remote: preflight-ko-remote
+	REMOTE_SSH_TARGET="$(REMOTE_SSH_TARGET)" REGISTRY_HOST="$(REGISTRY_HOST)" "$(PUBLISH_AH_RESOLVER_KO_REMOTE_SCRIPT)"
