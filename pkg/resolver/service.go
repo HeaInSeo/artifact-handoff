@@ -906,6 +906,9 @@ func (s *Service) FinalizeSampleRunCore(ctx context.Context, sampleRunID string)
 	if !ok {
 		lifecycle = domain.SampleRunLifecycle{SampleRunID: sampleRunID}
 	}
+	if lifecycle.Finalized {
+		return nil
+	}
 	if err := s.refreshLifecycleSnapshot(ctx, &lifecycle); err != nil {
 		return err
 	}

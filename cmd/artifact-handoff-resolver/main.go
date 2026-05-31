@@ -70,7 +70,13 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(ctx)
-	grpcServer.GracefulStop()
+	grpcDone := make(chan struct{})
+	go func() { grpcServer.GracefulStop(); close(grpcDone) }()
+	select {
+	case <-grpcDone:
+	case <-ctx.Done():
+		grpcServer.Stop()
+	}
 }
 
 func envOrDefault(key, fallback string) string {

@@ -1681,6 +1681,30 @@ func TestFinalizeSampleRunStoresLifecycle(t *testing.T) {
 	}
 }
 
+func TestFinalizeSampleRunIdempotent(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+	t1 := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return t1 }
+
+	if err := service.FinalizeSampleRun(context.Background(), "sample-idem"); err != nil {
+		t.Fatalf("first finalize: %v", err)
+	}
+	lifecycle1, _, _ := service.GetSampleRunLifecycle(context.Background(), "sample-idem")
+	retentionAfterFirst := lifecycle1.RetentionUntil
+
+	// Advance clock and call again — RetentionUntil must not move.
+	t2 := t1.Add(10 * time.Minute)
+	service.now = func() time.Time { return t2 }
+	if err := service.FinalizeSampleRun(context.Background(), "sample-idem"); err != nil {
+		t.Fatalf("second finalize: %v", err)
+	}
+	lifecycle2, _, _ := service.GetSampleRunLifecycle(context.Background(), "sample-idem")
+	if !lifecycle2.RetentionUntil.Equal(*retentionAfterFirst) {
+		t.Fatalf("RetentionUntil shifted on second call: got %v, want %v", lifecycle2.RetentionUntil, retentionAfterFirst)
+	}
+}
+
 func TestEvaluateGCSetsEligibility(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
