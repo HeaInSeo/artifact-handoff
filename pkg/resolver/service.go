@@ -541,16 +541,6 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 		if producerNodeName != "" && targetNodeName == producerNodeName && len(localCandidates) > 0 {
 			candidates := append([]domain.MaterializationCandidate{}, localCandidates...)
 			candidates = append(candidates, remoteCandidates...)
-			if len(candidates) == 0 {
-				return domain.ResolvedHandoff{
-					Status:              domain.ResolutionStatusUnavailable,
-					Decision:            domain.ResolutionDecisionUnavailable,
-					PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
-					MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
-					Reason:              "artifact local location unknown; cannot provide local reuse plan",
-					Retryable:           false,
-				}, nil
-			}
 			return domain.ResolvedHandoff{
 				Status:   domain.ResolutionStatusResolved,
 				Decision: domain.ResolutionDecisionLocalReuse,
@@ -872,15 +862,6 @@ func firstReadyHTTPSource(sources []domain.ArtifactSource) *domain.ArtifactSourc
 		}
 	}
 	return nil
-}
-
-func hasAnyNodeLocalSource(sources []domain.ArtifactSource) bool {
-	for i := range sources {
-		if sources[i].Location.NodeLocal != nil && sources[i].Location.NodeLocal.Path != "" {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {

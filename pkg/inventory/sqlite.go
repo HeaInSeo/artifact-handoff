@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/HeaInSeo/artifact-handoff/internal/ids"
@@ -146,11 +147,7 @@ func isDuplicateColumn(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return msg == "SQL logic error: duplicate column name: logical_uri (1)" ||
-		msg == "SQL logic error: duplicate column name: locations_json (1)" ||
-		msg == "SQL logic error: duplicate column name: last_verified_at (1)" ||
-		msg == "SQL logic error: duplicate column name: last_error (1)"
+	return strings.Contains(err.Error(), "duplicate column name:")
 }
 
 func (s *SQLiteStore) PutArtifact(ctx context.Context, a domain.Artifact) error {

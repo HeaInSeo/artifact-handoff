@@ -43,6 +43,13 @@ spec:
             # For production use a PersistentVolumeClaim and point this at a stable path.
             - name: AH_STORE_DSN
               value: "sqlite:/data/ah.db"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           volumeMounts:
             - name: ah-data
               mountPath: /data

@@ -13,6 +13,7 @@ import (
 	"github.com/HeaInSeo/artifact-handoff/pkg/inventory"
 	"github.com/HeaInSeo/artifact-handoff/pkg/resolver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 func main() {
@@ -41,7 +42,18 @@ func main() {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 	}
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.MaxRecvMsgSize(4*1024*1024),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			MaxConnectionIdle: 5 * time.Minute,
+			Time:              2 * time.Minute,
+			Timeout:           20 * time.Second,
+		}),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             30 * time.Second,
+			PermitWithoutStream: true,
+		}),
+	)
 	resolver.RegisterGRPCService(grpcServer, service)
 	grpcListener, err := net.Listen("tcp", grpcAddr)
 	if err != nil {

@@ -388,7 +388,7 @@ func validateLegacyArtifactURI(raw string) error {
 
 func SourceID(artifactID, backendID, fingerprint string) string {
 	sum := sha256.Sum256([]byte(artifactID + "\x00" + backendID + "\x00" + fingerprint))
-	return "src-" + hex.EncodeToString(sum[:8])
+	return "src-" + hex.EncodeToString(sum[:])
 }
 
 func LocationFingerprint(location Location) string {
