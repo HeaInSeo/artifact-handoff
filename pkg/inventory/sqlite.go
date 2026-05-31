@@ -55,8 +55,12 @@ func sqliteApplyPragmas(db *sql.DB) error {
 func (s *SQLiteStore) Close() error { return s.db.Close() }
 
 func sqliteMigrate(db *sql.DB) error {
-	_, err := db.Exec(`
-		CREATE TABLE IF NOT EXISTS artifacts (
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin migration transaction: %w", err)
+	}
+	ddl := []string{
+		`CREATE TABLE IF NOT EXISTS artifacts (
 			key                 TEXT PRIMARY KEY,
 			sample_run_id       TEXT NOT NULL,
 			producer_node_id    TEXT NOT NULL,
@@ -70,8 +74,8 @@ func sqliteMigrate(db *sql.DB) error {
 			locations_json      TEXT NOT NULL DEFAULT '[]',
 			size_bytes          INTEGER NOT NULL DEFAULT 0,
 			created_at          TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS artifact_sources (
+		)`,
+		`CREATE TABLE IF NOT EXISTS artifact_sources (
 			source_id             TEXT PRIMARY KEY,
 			artifact_id           TEXT NOT NULL,
 			backend_id            TEXT NOT NULL,
@@ -83,16 +87,16 @@ func sqliteMigrate(db *sql.DB) error {
 			updated_at            TEXT NOT NULL,
 			last_verified_at      TEXT NOT NULL DEFAULT '',
 			last_error            TEXT NOT NULL DEFAULT ''
-		);
-		CREATE TABLE IF NOT EXISTS node_terminals (
+		)`,
+		`CREATE TABLE IF NOT EXISTS node_terminals (
 			key            TEXT PRIMARY KEY,
 			sample_run_id  TEXT NOT NULL,
 			node_id        TEXT NOT NULL,
 			attempt_id     TEXT NOT NULL,
 			terminal_state TEXT NOT NULL,
 			recorded_at    TEXT NOT NULL
-		);
-		CREATE TABLE IF NOT EXISTS sample_run_lifecycles (
+		)`,
+		`CREATE TABLE IF NOT EXISTS sample_run_lifecycles (
 			sample_run_id           TEXT PRIMARY KEY,
 			finalized               INTEGER NOT NULL DEFAULT 0,
 			finalized_at            TEXT,
@@ -108,11 +112,23 @@ func sqliteMigrate(db *sql.DB) error {
 			canceled_node_count     INTEGER NOT NULL DEFAULT 0,
 			retained_artifact_count INTEGER NOT NULL DEFAULT 0,
 			retained_artifact_bytes INTEGER NOT NULL DEFAULT 0
-		);
-	`)
-	if err != nil {
-		return err
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_artifacts_artifact_id ON artifacts(artifact_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_artifacts_sample_run_id ON artifacts(sample_run_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_artifact_sources_artifact_id ON artifact_sources(artifact_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_node_terminals_sample_run_id ON node_terminals(sample_run_id)`,
 	}
+	for _, stmt := range ddl {
+		if _, err := tx.Exec(stmt); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration transaction: %w", err)
+	}
+	// ALTER TABLE runs outside the transaction because a duplicate-column error
+	// is expected on already-migrated databases and must be handled per-statement.
 	for _, stmt := range []string{
 		`ALTER TABLE artifacts ADD COLUMN logical_uri TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE artifacts ADD COLUMN locations_json TEXT NOT NULL DEFAULT '[]'`,
