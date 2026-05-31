@@ -290,7 +290,7 @@ func TestRegisterArtifactRejectsCredentialBearingHTTPURI(t *testing.T) {
 		OutputName:        "dataset",
 		Digest:            "sha256:abc123",
 		Locations: []domain.Location{{
-			HTTP: &domain.HTTPSource{URI: "https://user:pass@artifact-source.local/artifacts/abc123"},
+			HTTP: &domain.HTTPSource{URI: "https://user:pass@artifact-source.local/artifacts/abc123"}, //nolint:gosec // intentional credential-bearing URI to verify rejection
 		}},
 	})
 	if err == nil {
@@ -331,7 +331,7 @@ func TestRegisterArtifactRejectsTopLevelCredentialBearingURIAndDoesNotPersist(t 
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
 
-	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{ //nolint:gosec // intentional credential-bearing URI to verify rejection
 		SampleRunID:       "sample-top-uri-userinfo",
 		ProducerNodeID:    "producer-a",
 		ProducerAttemptID: "attempt-1",

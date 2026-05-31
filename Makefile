@@ -19,13 +19,14 @@ PKGS_ALL := ./...
 PKGS_CORE := ./api/... ./cmd/... ./pkg/...
 PKGS_COVER := ./cmd/... ./pkg/...
 PKGS_SECURITY := ./cmd/... ./pkg/...
+COVERAGE_THRESHOLD := 70
 
 REMOTE_SSH_TARGET ?= seoy@100.123.80.48
 REGISTRY_HOST ?= harbor.10.113.24.96.nip.io
 PREFLIGHT_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/preflight-ko-remote.sh
 PUBLISH_AH_RESOLVER_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/publish-ah-resolver-ko-remote.sh
 
-.PHONY: test test-regression coverage fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
+.PHONY: test test-regression coverage coverage-check fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
 
 test:
 	go test $(PKGS_ALL)
@@ -38,6 +39,15 @@ coverage:
 	@mkdir -p "$(GOCACHE_DIR)" "$(GOTMPDIR_DIR)"
 	GOCACHE="$(GOCACHE_DIR)" GOTMPDIR="$(GOTMPDIR_DIR)" go test $(PKGS_COVER) -coverprofile="$(REPORT_DIR)/cover.out" -covermode=atomic
 	go tool cover -func="$(REPORT_DIR)/cover.out" | tee "$(REPORT_DIR)/coverage.txt"
+
+coverage-check: coverage
+	@TOTAL=$$(go tool cover -func="$(REPORT_DIR)/cover.out" | awk '/^total:/{gsub(/%/,""); print int($$3)}'); \
+	echo "[artifact-handoff] total coverage: $${TOTAL}%"; \
+	if [ "$${TOTAL}" -lt "$(COVERAGE_THRESHOLD)" ]; then \
+		echo "FAIL: coverage $${TOTAL}% is below threshold $(COVERAGE_THRESHOLD)%"; exit 1; \
+	else \
+		echo "OK: coverage $${TOTAL}% >= $(COVERAGE_THRESHOLD)%"; \
+	fi
 
 fmt:
 	go fmt $(PKGS_ALL)
