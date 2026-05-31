@@ -806,7 +806,7 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 		}
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() {
 			return fmt.Errorf("http source host %q is not allowed", host)
 		}
 	}

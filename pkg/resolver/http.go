@@ -116,7 +116,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			ArtifactID string                `json:"artifactId"`
 			Source     domain.ArtifactSource `json:"source"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -136,7 +136,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			SourceID string             `json:"sourceId"`
 			State    domain.SourceState `json:"state"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -155,7 +155,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 		var req struct {
 			SourceID string `json:"sourceId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -179,7 +179,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			Binding        domain.Binding `json:"binding"`
 			TargetNodeName string         `json:"targetNodeName"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -201,7 +201,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			AttemptID     string `json:"attemptId"`
 			TerminalState string `json:"terminalState"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -219,7 +219,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 		var req struct {
 			SampleRunID string `json:"sampleRunId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -237,7 +237,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 		var req struct {
 			SampleRunID string `json:"sampleRunId"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -266,6 +266,11 @@ func NewHTTPHandler(service *Service) http.Handler {
 	})
 	mux.Handle("/metrics", service.Metrics().Handler())
 	return mux
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
+	return json.NewDecoder(r.Body).Decode(v)
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

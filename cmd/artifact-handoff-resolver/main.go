@@ -19,6 +19,9 @@ func main() {
 	httpAddr := envOrDefault("AH_ADDR", ":8080")
 	grpcAddr := envOrDefault("AH_GRPC_ADDR", ":9090")
 	storeDSN := envOrDefault("AH_STORE_DSN", "memory")
+	if storeDSN == "memory" || storeDSN == "" {
+		log.Printf("WARNING: AH_STORE_DSN not set or is 'memory' — data will not survive restarts")
+	}
 
 	store, closeStore, err := inventory.OpenStore(storeDSN)
 	if err != nil {
@@ -35,6 +38,8 @@ func main() {
 		Addr:              httpAddr,
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
 	}
 	grpcServer := grpc.NewServer()
 	resolver.RegisterGRPCService(grpcServer, service)
