@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HeaInSeo/artifact-handoff/internal/ids"
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
 	"github.com/HeaInSeo/artifact-handoff/pkg/inventory"
 	"github.com/HeaInSeo/artifact-handoff/pkg/metrics"
@@ -100,6 +101,14 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	}
 	if artifact.ProducerAttemptID == "" {
 		return "", fmt.Errorf("producerAttemptID is required: %w", ErrInvalidArgument)
+	}
+	if err := (ids.ArtifactKey{
+		SampleRunID:       artifact.SampleRunID,
+		ProducerNodeID:    artifact.ProducerNodeID,
+		ProducerAttemptID: artifact.ProducerAttemptID,
+		OutputName:        artifact.OutputName,
+	}).Validate(); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
 	if artifact.CreatedAt.IsZero() {
 		artifact.CreatedAt = s.now()
@@ -880,6 +889,9 @@ func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeI
 	}
 	if attemptID == "" {
 		return fmt.Errorf("attemptID is required: %w", ErrInvalidArgument)
+	}
+	if err := (ids.NodeAttemptKey{SampleRunID: sampleRunID, NodeID: nodeID, AttemptID: attemptID}).Validate(); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
 	switch terminalState {
 	case "Succeeded", "Failed", "Canceled":
