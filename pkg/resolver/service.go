@@ -795,6 +795,9 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 		return fmt.Errorf("http source host is required: %w", ErrInvalidArgument)
 	}
 	if parsed.RawQuery != "" {
+		if looksLikeSignedURLQuery(parsed.RawQuery) {
+			return fmt.Errorf("http source uri must not contain signed URL query string; use runtime-only credentialRef flow: %w", ErrInvalidArgument)
+		}
 		return fmt.Errorf("http source uri must not contain query string: %w", ErrInvalidArgument)
 	}
 	if len(allowedHosts) == 0 && !allowAny {
@@ -811,6 +814,24 @@ func validateCandidateSource(source domain.ArtifactSource, allowedHosts map[stri
 		}
 	}
 	return nil
+}
+
+func looksLikeSignedURLQuery(rawQuery string) bool {
+	rawQuery = strings.ToLower(rawQuery)
+	for _, marker := range []string{
+		"x-amz-signature",
+		"x-amz-credential",
+		"x-goog-signature",
+		"x-goog-credential",
+		"x-ms-signature",
+		"signature=",
+		"expires=",
+	} {
+		if strings.Contains(rawQuery, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseBoolEnv(raw string) bool {

@@ -327,6 +327,33 @@ func TestRegisterArtifactRejectsHTTPQuery(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactRejectsSignedHTTPSourceURIAndDoesNotPersist(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-http-signed-query",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		Digest:            "sha256:abc123",
+		Locations: []domain.Location{{
+			HTTP: &domain.HTTPSource{URI: "https://artifact-source.local/artifacts/abc123?X-Amz-Signature=abc&X-Amz-Credential=issuer"},
+		}},
+	})
+	if err == nil {
+		t.Fatal("expected signed HTTP source URI to be rejected")
+	}
+	if !strings.Contains(err.Error(), "signed URL query string") {
+		t.Fatalf("error = %q, want signed URL query string", err)
+	}
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-http-signed-query", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite signed URI rejection")
+	}
+}
+
 func TestRegisterArtifactRejectsTopLevelCredentialBearingURIAndDoesNotPersist(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -345,6 +372,30 @@ func TestRegisterArtifactRejectsTopLevelCredentialBearingURIAndDoesNotPersist(t 
 		t.Fatalf("get artifact: %v", err)
 	} else if ok {
 		t.Fatal("artifact was stored despite top-level URI rejection")
+	}
+}
+
+func TestRegisterArtifactRejectsTopLevelSignedURIAndDoesNotPersist(t *testing.T) {
+	store := inventory.NewMemoryStore()
+	service := newTestService(t, store)
+
+	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-top-uri-signed-query",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		URI:               "https://artifact-source.local/artifacts/abc123?X-Goog-Signature=abc&X-Goog-Credential=issuer",
+	})
+	if err == nil {
+		t.Fatal("expected top-level signed artifact URI to be rejected")
+	}
+	if !strings.Contains(err.Error(), "signed URL query string") {
+		t.Fatalf("error = %q, want signed URL query string", err)
+	}
+	if _, ok, err := store.GetArtifact(context.Background(), "sample-top-uri-signed-query", "producer-a", "attempt-1", "dataset"); err != nil {
+		t.Fatalf("get artifact: %v", err)
+	} else if ok {
+		t.Fatal("artifact was stored despite signed URI rejection")
 	}
 }
 

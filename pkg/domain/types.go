@@ -359,7 +359,7 @@ func validateHTTPSource(source HTTPSource) error {
 		return fmt.Errorf("http source host is required")
 	}
 	if parsed.RawQuery != "" {
-		return fmt.Errorf("http source uri must not contain query string")
+		return rejectURIQuery("http source uri", parsed.RawQuery)
 	}
 	return nil
 }
@@ -381,9 +381,34 @@ func validateLegacyArtifactURI(raw string) error {
 		return fmt.Errorf("artifact uri host is required")
 	}
 	if parsed.RawQuery != "" {
-		return fmt.Errorf("artifact uri must not contain query string")
+		return rejectURIQuery("artifact uri", parsed.RawQuery)
 	}
 	return nil
+}
+
+func rejectURIQuery(subject string, rawQuery string) error {
+	if looksLikeSignedURLQuery(rawQuery) {
+		return fmt.Errorf("%s must not contain signed URL query string; use runtime-only credentialRef flow", subject)
+	}
+	return fmt.Errorf("%s must not contain query string", subject)
+}
+
+func looksLikeSignedURLQuery(rawQuery string) bool {
+	rawQuery = strings.ToLower(rawQuery)
+	for _, marker := range []string{
+		"x-amz-signature",
+		"x-amz-credential",
+		"x-goog-signature",
+		"x-goog-credential",
+		"x-ms-signature",
+		"signature=",
+		"expires=",
+	} {
+		if strings.Contains(rawQuery, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func SourceID(artifactID, backendID, fingerprint string) string {
