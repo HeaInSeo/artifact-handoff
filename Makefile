@@ -26,7 +26,7 @@ REGISTRY_HOST ?= harbor.10.113.24.96.nip.io
 PREFLIGHT_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/preflight-ko-remote.sh
 PUBLISH_AH_RESOLVER_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/publish-ah-resolver-ko-remote.sh
 
-.PHONY: test test-regression coverage coverage-check fmt vet lint lint-depguard lint-security vuln vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
+.PHONY: test test-regression coverage coverage-check fmt vet lint lint-depguard lint-security lint-security-check vuln vuln-check vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
 
 test:
 	go test $(PKGS_ALL)
@@ -106,11 +106,19 @@ lint-security: golangci-lint
 	| tee "$(REPORT_DIR)/gosec.txt"; \
 	echo "gosec_exit=$$?" | tee -a "$(REPORT_DIR)/lint-security-summary.txt"
 
+lint-security-check: golangci-lint
+	@mkdir -p "$(REPORT_DIR)"
+	$(GOLANGCI_LINT) run --enable-only gosec $(PKGS_SECURITY) | tee "$(REPORT_DIR)/gosec.txt"
+
 vuln: govulncheck
 	@mkdir -p "$(REPORT_DIR)"
 	@set +e; \
 	$(GOVULNCHECK) $(PKGS_SECURITY) 2>&1 | tee "$(REPORT_DIR)/govulncheck-core.txt"; \
 	echo "govulncheck_core_exit=$$?" | tee "$(REPORT_DIR)/govulncheck-core.summary"
+
+vuln-check: govulncheck
+	@mkdir -p "$(REPORT_DIR)"
+	$(GOVULNCHECK) $(PKGS_SECURITY) 2>&1 | tee "$(REPORT_DIR)/govulncheck-core.txt"
 
 vuln-all: govulncheck
 	@mkdir -p "$(REPORT_DIR)"
