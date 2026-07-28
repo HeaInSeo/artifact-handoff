@@ -19,7 +19,7 @@ permissions:
 
 env:
   PROTOC_GEN_GO_VERSION: v1.36.11
-  PROTOC_GEN_GO_GRPC_VERSION: v1.6.2
+  PROTOC_GEN_GO_GRPC_VERSION: v1.6.1
 
 concurrency:
   group: proto-${{ github.ref }}
