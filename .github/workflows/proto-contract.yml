@@ -50,6 +50,9 @@ jobs:
       - name: Lint protobuf schema
         run: buf lint
 
+      - name: Fetch base branch ref
+        run: git fetch origin main:refs/heads/main
+
       - name: Check breaking changes
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
