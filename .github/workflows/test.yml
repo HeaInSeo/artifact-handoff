@@ -57,10 +57,10 @@ jobs:
           git diff --exit-code -- go.mod go.sum
 
       - name: Run tests
-        run: make test
+        run: make test-race
 
       - name: Run regression suite
-        run: make test-regression
+        run: make test-regression-race
 
       - name: Run security lint guardrail
         run: make lint-security-check

@@ -26,21 +26,36 @@ REGISTRY_HOST ?= harbor.10.113.24.96.nip.io
 PREFLIGHT_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/preflight-ko-remote.sh
 PUBLISH_AH_RESOLVER_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/publish-ah-resolver-ko-remote.sh
 
-.PHONY: test test-regression coverage coverage-check fmt vet lint lint-depguard lint-security lint-security-check vuln vuln-check vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
+.PHONY: test test-race test-regression test-regression-race coverage coverage-race coverage-check fmt vet lint lint-depguard lint-security lint-security-check vuln vuln-check vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
 
+# No CGO required (pure-Go SQLite via modernc.org/sqlite, see README) - keep
+# the default targets portable. Use the *-race variants (CGO required, run in
+# CI) to catch data races.
 test:
+	go test $(PKGS_ALL)
+
+test-race:
 	go test -race $(PKGS_ALL)
 
 test-regression:
+	go test ./pkg/resolver -run 'TestHTTP|TestGRPC|TestSimulate'
+
+test-regression-race:
 	go test -race ./pkg/resolver -run 'TestHTTP|TestGRPC|TestSimulate'
 
 coverage:
 	@mkdir -p "$(REPORT_DIR)"
 	@mkdir -p "$(GOCACHE_DIR)" "$(GOTMPDIR_DIR)"
+	GOCACHE="$(GOCACHE_DIR)" GOTMPDIR="$(GOTMPDIR_DIR)" go test $(PKGS_COVER) -coverprofile="$(REPORT_DIR)/cover.out" -covermode=atomic
+	go tool cover -func="$(REPORT_DIR)/cover.out" | tee "$(REPORT_DIR)/coverage.txt"
+
+coverage-race:
+	@mkdir -p "$(REPORT_DIR)"
+	@mkdir -p "$(GOCACHE_DIR)" "$(GOTMPDIR_DIR)"
 	GOCACHE="$(GOCACHE_DIR)" GOTMPDIR="$(GOTMPDIR_DIR)" go test -race $(PKGS_COVER) -coverprofile="$(REPORT_DIR)/cover.out" -covermode=atomic
 	go tool cover -func="$(REPORT_DIR)/cover.out" | tee "$(REPORT_DIR)/coverage.txt"
 
-coverage-check: coverage
+coverage-check: coverage-race
 	@TOTAL=$$(go tool cover -func="$(REPORT_DIR)/cover.out" | awk '/^total:/{gsub(/%/,""); print int($$3)}'); \
 	echo "[artifact-handoff] total coverage: $${TOTAL}%"; \
 	if [ "$${TOTAL}" -lt "$(COVERAGE_THRESHOLD)" ]; then \
