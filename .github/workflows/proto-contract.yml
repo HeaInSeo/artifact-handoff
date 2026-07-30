@@ -51,6 +51,7 @@ jobs:
         run: buf lint
 
       - name: Fetch base branch ref
+        if: github.event_name == 'pull_request'
         run: git fetch origin main:refs/heads/main
 
       - name: Check breaking changes
