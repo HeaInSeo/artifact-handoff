@@ -29,15 +29,15 @@ PUBLISH_AH_RESOLVER_KO_REMOTE_SCRIPT := $(CURDIR)/scripts/publish-ah-resolver-ko
 .PHONY: test test-regression coverage coverage-check fmt vet lint lint-depguard lint-security lint-security-check vuln vuln-check vuln-all golangci-lint govulncheck buf proto proto-check preflight-ko-remote ko-publish-remote
 
 test:
-	go test $(PKGS_ALL)
+	go test -race $(PKGS_ALL)
 
 test-regression:
-	go test ./pkg/resolver -run 'TestHTTP|TestGRPC|TestSimulate'
+	go test -race ./pkg/resolver -run 'TestHTTP|TestGRPC|TestSimulate'
 
 coverage:
 	@mkdir -p "$(REPORT_DIR)"
 	@mkdir -p "$(GOCACHE_DIR)" "$(GOTMPDIR_DIR)"
-	GOCACHE="$(GOCACHE_DIR)" GOTMPDIR="$(GOTMPDIR_DIR)" go test $(PKGS_COVER) -coverprofile="$(REPORT_DIR)/cover.out" -covermode=atomic
+	GOCACHE="$(GOCACHE_DIR)" GOTMPDIR="$(GOTMPDIR_DIR)" go test -race $(PKGS_COVER) -coverprofile="$(REPORT_DIR)/cover.out" -covermode=atomic
 	go tool cover -func="$(REPORT_DIR)/cover.out" | tee "$(REPORT_DIR)/coverage.txt"
 
 coverage-check: coverage
