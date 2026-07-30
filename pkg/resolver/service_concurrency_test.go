@@ -65,7 +65,7 @@ func TestRegisterArtifact_PropagatesStoreWriteFailure(t *testing.T) {
 	// The failure must not leave a phantom artifact visible through the
 	// underlying store once writes work again.
 	store.failPutArtifact = false
-	_, found, getErr := store.Store.GetArtifact(context.Background(), "sample-1", "parent-a", "attempt-1", "dataset")
+	_, found, getErr := store.GetArtifact(context.Background(), "sample-1", "parent-a", "attempt-1", "dataset")
 	if getErr != nil {
 		t.Fatalf("GetArtifact() error = %v", getErr)
 	}
@@ -98,7 +98,7 @@ func TestEvaluateGC_PropagatesStoreWriteFailure(t *testing.T) {
 	// GCEligible=false, GCBlockedReason="gc_not_evaluated"). Capture it so we
 	// can assert the failed EvaluateGC below leaves it untouched rather than
 	// silently applying a partial update.
-	before, ok, err := store.Store.GetSampleRunLifecycle(context.Background(), "sample-2")
+	before, ok, err := store.GetSampleRunLifecycle(context.Background(), "sample-2")
 	if err != nil || !ok {
 		t.Fatalf("get lifecycle before failed GC: ok=%v err=%v", ok, err)
 	}
@@ -111,7 +111,7 @@ func TestEvaluateGC_PropagatesStoreWriteFailure(t *testing.T) {
 	// A failed Upsert must not leave a corrupted/partial lifecycle behind -
 	// the pre-existing record should be byte-for-byte unchanged.
 	store.failUpsertLifecycle = false
-	after, found, err := store.Store.GetSampleRunLifecycle(context.Background(), "sample-2")
+	after, found, err := store.GetSampleRunLifecycle(context.Background(), "sample-2")
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle() error = %v", err)
 	}
