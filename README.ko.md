@@ -30,6 +30,8 @@ GetSampleRunLifecycle(sampleRunID)
 
 **Spawner가 이 결정들을 PodSpec으로 번역한다. `artifact-handoff`는 Kubernetes 리소스를 직접 다루지 않는다.**
 
+`node_local.Path`도 이 결정 계약의 일부다. `artifact-handoff`는 이 경로를 기록하고 반환하지만, 파일시스템 존재 확인, 디렉터리 생성, 파일 삭제, path 단위 GC를 수행하지 않는다. producer/runtime consumer 쪽이 재사용 시점의 path 존재 보장과 cleanup을 소유한다.
+
 ---
 
 ## Resolution Status

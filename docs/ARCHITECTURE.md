@@ -174,6 +174,8 @@ The **Spawner** is responsible for translating these decisions into concrete Pod
 - `MaterializationPlan.remote_fetch` → init-container or sidecar configuration with URI and expected digest
 - `MaterializationPlan.local_reuse` → volume mount or path reference to the locally available artifact
 
+For `node_local` locations, `Path` is an unverified runtime path reference. `artifact-handoff` records it as availability metadata and may return it in a `local_reuse` plan, but it does not stat the path, create parent directories, remove files, or garbage-collect path contents. Those checks and lifecycle actions belong to the producer/runtime consumer integration.
+
 This layer must remain thin.
 `artifact-handoff` owns the decision. Spawner owns the translation.
 Neither may absorb the other's responsibility.
