@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -141,19 +142,22 @@ func TestResolveHandoff_PropagatesStoreReadFailure(t *testing.T) {
 
 // TestConcurrentGCAndResolve_RaceSafeAndConsistent fires EvaluateGC and
 // ResolveHandoff concurrently against the same sampleRunID, past the point
-// where the sample run is GC-eligible. This is the TOCTOU window flagged in
-// https://github.com/HeaInSeo/artifact-handoff/issues/12: ResolveHandoffCore
-// reads GCEligible once and acts on it, with no lock held across the
-// read-then-decide sequence, so a concurrent EvaluateGC can flip eligibility
-// in between.
+// where the sample run is GC-eligible, for many iterations under -race.
 //
-// Run with -race, this proves the storage layer itself has no data race
-// under concurrent access (MemoryStore is mutex-protected per-call). It does
-// NOT prove the TOCTOU window is closed - it isn't, by design, since there's
-// no cross-call locking in Service. What it asserts is the weaker but
-// load-bearing invariant: every concurrent ResolveHandoff call returns
-// either a normal RESOLVED result or a GC_EXPIRED result, never a panic,
-// never any other error, and never a torn/inconsistent read.
+// This is a stress/smoke test, not a guaranteed-interleaving test: the Go
+// scheduler could in principle run every EvaluateGC iteration to completion
+// before any ResolveHandoff call gets scheduled (or vice versa), in which
+// case this test would pass without ever actually exercising the read/write
+// interleaving it's aimed at. What it reliably proves is narrower but still
+// load-bearing: the storage layer has no data race under concurrent access
+// (MemoryStore is mutex-protected per-call, confirmed under -race across
+// many iterations), and every concurrent ResolveHandoff call returns a
+// sane, fully-formed result (RESOLVED or GC_EXPIRED, never a panic, never
+// any other error, never a torn/inconsistent read) regardless of ordering.
+//
+// TestConcurrentGCAndResolve_ForcedInterleaving below uses a gated store to
+// deterministically force the actual TOCTOU window this test can only
+// probabilistically stumble into.
 func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	store := inventory.NewMemoryStore()
 	service := newTestService(t, store)
@@ -261,6 +265,120 @@ func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	}
 	if !ok || !lifecycle.GCEligible {
 		t.Fatalf("expected sample run to converge to GC-eligible, got %+v (ok=%v)", lifecycle, ok)
+	}
+}
+
+// gatedUpsertStore wraps a real inventory.Store and, once armed, makes the
+// next UpsertSampleRunLifecycle call pause between EvaluateGCCore's read of
+// the current lifecycle and its write of the recomputed one: as soon as the
+// wrapped Upsert is entered, upsertEntered is closed (signaling the test
+// that GC's read-then-decide phase is done and the pre-flip state is still
+// what's stored), then it blocks on upsertGate until the test closes that
+// channel to let the write through. This deterministically forces the
+// TOCTOU interleaving instead of hoping the Go scheduler produces it.
+//
+// armed starts false so setup calls (e.g. FinalizeSampleRun's own internal
+// UpsertSampleRunLifecycle) pass straight through and don't deadlock on a
+// gate nothing has opened yet; the test arms it right before triggering the
+// one Upsert call it actually wants to intercept.
+type gatedUpsertStore struct {
+	inventory.Store
+	armed         atomic.Bool
+	upsertEntered chan struct{}
+	upsertGate    chan struct{}
+}
+
+func (s *gatedUpsertStore) UpsertSampleRunLifecycle(ctx context.Context, lifecycle domain.SampleRunLifecycle) error {
+	if s.armed.Load() {
+		close(s.upsertEntered)
+		<-s.upsertGate
+	}
+	return s.Store.UpsertSampleRunLifecycle(ctx, lifecycle)
+}
+
+// TestConcurrentGCAndResolve_ForcedInterleaving deterministically exercises
+// the TOCTOU window flagged in
+// https://github.com/HeaInSeo/artifact-handoff/issues/12:
+// ResolveHandoffCore reads GCEligible once and acts on it, with no lock held
+// across EvaluateGCCore's own read-then-decide-then-write sequence, so a
+// resolve that lands in the middle of a concurrent EvaluateGC call can (and,
+// forced here, does) observe the pre-flip state. Unlike
+// TestConcurrentGCAndResolve_RaceSafeAndConsistent above, this test does not
+// rely on scheduler luck: gatedUpsertStore blocks GC's write until the test
+// has already run a resolve in that exact window and asserted what it saw.
+func TestConcurrentGCAndResolve_ForcedInterleaving(t *testing.T) {
+	store := &gatedUpsertStore{
+		Store:         inventory.NewMemoryStore(),
+		upsertEntered: make(chan struct{}),
+		upsertGate:    make(chan struct{}),
+	}
+	service := newTestService(t, store)
+	baseNow := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
+	service.now = func() time.Time { return baseNow }
+
+	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
+		SampleRunID:       "sample-forced-race",
+		ProducerNodeID:    "parent-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		NodeName:          "node-a",
+		Digest:            "sha256:forced-race",
+		SizeBytes:         512,
+		URI:               "http://artifact.local/sample-forced-race-dataset",
+	}); err != nil {
+		t.Fatalf("register artifact: %v", err)
+	}
+	if err := service.NotifyNodeTerminal(context.Background(), "sample-forced-race", "parent-a", "attempt-1", "Succeeded"); err != nil {
+		t.Fatalf("notify terminal: %v", err)
+	}
+	if err := service.FinalizeSampleRun(context.Background(), "sample-forced-race"); err != nil {
+		t.Fatalf("finalize sample run: %v", err)
+	}
+	baseNow = baseNow.Add(16 * time.Minute) // past the retention window
+
+	binding := domain.Binding{
+		SampleRunID:        "sample-forced-race",
+		ProducerNodeID:     "parent-a",
+		ProducerAttemptID:  "attempt-1",
+		ProducerOutputName: "dataset",
+		ConsumePolicy:      domain.ConsumePolicyRemoteOK,
+	}
+
+	store.armed.Store(true)
+	gcErrCh := make(chan error, 1)
+	go func() {
+		gcErrCh <- service.EvaluateGC(context.Background(), "sample-forced-race")
+	}()
+
+	select {
+	case <-store.upsertEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("EvaluateGC never reached its UpsertSampleRunLifecycle call")
+	}
+
+	// GC has read the not-yet-eligible lifecycle and is blocked before
+	// writing the flip. A resolve right now must observe the pre-flip state.
+	beforeFlip, err := service.ResolveHandoff(context.Background(), binding, "consumer-node")
+	if err != nil {
+		t.Fatalf("ResolveHandoff during GC's pending write: %v", err)
+	}
+	if beforeFlip.Status != domain.ResolutionStatusResolved {
+		t.Fatalf("ResolveHandoff status during GC's pending write = %q, want RESOLVED (pre-flip state)", beforeFlip.Status)
+	}
+
+	close(store.upsertGate) // let GC's write through
+	if err := <-gcErrCh; err != nil {
+		t.Fatalf("EvaluateGC: %v", err)
+	}
+
+	// GC has now committed the flip. A resolve after this point must
+	// observe GC_EXPIRED.
+	afterFlip, err := service.ResolveHandoff(context.Background(), binding, "consumer-node")
+	if err != nil {
+		t.Fatalf("ResolveHandoff after GC's write: %v", err)
+	}
+	if afterFlip.Status != domain.ResolutionStatusGCExpired {
+		t.Fatalf("ResolveHandoff status after GC's write = %q, want GC_EXPIRED (post-flip state)", afterFlip.Status)
 	}
 }
 
