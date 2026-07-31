@@ -224,6 +224,13 @@ func TestValidateArtifactLocation(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "node_local_path_is_not_filesystem_validated",
+			loc: Location{
+				NodeLocal: &NodeLocalLocation{NodeName: "node-1", Path: "/definitely/not/a/validated/path"},
+			},
+			wantErr: false,
+		},
+		{
 			name: "http_ok",
 			loc: Location{
 				HTTP: &HTTPSource{URI: "https://example.com/file"},

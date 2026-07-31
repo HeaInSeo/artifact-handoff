@@ -186,6 +186,10 @@ const (
 	SourceBackendTypeHTTP      SourceBackendType = "http"
 )
 
+// NodeLocalLocation identifies an artifact that is expected to be present on a
+// specific node. Path is a runtime filesystem contract between the producer and
+// downstream consumer: artifact-handoff records and returns it, but does not
+// stat, create, remove, or garbage-collect the path.
 type NodeLocalLocation struct {
 	NodeName string `json:"nodeName,omitempty"`
 	Path     string `json:"path,omitempty"`

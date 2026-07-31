@@ -173,6 +173,8 @@ Metadata layer는 product-readable artifact state를 소유한다.
 - `MaterializationPlan.remote_fetch` → URI와 expected digest를 갖는 init-container 또는 sidecar 설정
 - `MaterializationPlan.local_reuse` → 로컬에서 이미 사용 가능한 artifact의 volume mount 또는 경로 참조
 
+`node_local` location에서 `Path`는 검증되지 않은 runtime path 참조다. `artifact-handoff`는 이를 availability metadata로 기록하고 `local_reuse` plan에 반환할 수 있지만, path 존재 확인, parent directory 생성, 파일 삭제, path contents GC는 수행하지 않는다. 이런 확인과 lifecycle 동작은 producer/runtime consumer 통합 레이어의 책임이다.
+
 이 레이어는 얇게 유지해야 한다.
 `artifact-handoff`는 결정을 소유한다. Spawner는 번역을 소유한다.
 어느 쪽도 상대방의 책임을 흡수해서는 안 된다.
