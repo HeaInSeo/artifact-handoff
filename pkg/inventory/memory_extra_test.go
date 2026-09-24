@@ -18,7 +18,7 @@ func TestMemoryStore_GetArtifact_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	a := domain.Artifact{
-		SampleRunID:       "run-mem",
+		RunID:             "run-mem",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "att-1",
 		OutputName:        "model",
@@ -58,7 +58,7 @@ func TestMemoryStore_GetArtifactByID_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	a := domain.Artifact{
-		SampleRunID:       "run-byid",
+		RunID:             "run-byid",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "att-1",
 		OutputName:        "out",
@@ -76,8 +76,8 @@ func TestMemoryStore_GetArtifactByID_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("GetArtifactByID: not found")
 	}
-	if got.SampleRunID != a.SampleRunID {
-		t.Fatalf("SampleRunID = %q, want %q", got.SampleRunID, a.SampleRunID)
+	if got.RunID != a.RunID {
+		t.Fatalf("SampleRunID = %q, want %q", got.RunID, a.RunID)
 	}
 }
 
@@ -92,14 +92,14 @@ func TestMemoryStore_GetArtifactByID_NotFound(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_ListArtifactsBySampleRun(t *testing.T) {
+func TestMemoryStore_ListArtifactsByRun(t *testing.T) {
 	s := inventory.NewMemoryStore()
 	ctx := context.Background()
 
 	artifacts := []domain.Artifact{
-		{SampleRunID: "run-ls", ProducerNodeID: "a", ProducerAttemptID: "1", OutputName: "x", CreatedAt: time.Now().UTC()},
-		{SampleRunID: "run-ls", ProducerNodeID: "b", ProducerAttemptID: "1", OutputName: "y", CreatedAt: time.Now().UTC()},
-		{SampleRunID: "other-run", ProducerNodeID: "c", ProducerAttemptID: "1", OutputName: "z", CreatedAt: time.Now().UTC()},
+		{RunID: "run-ls", ProducerNodeID: "a", ProducerAttemptID: "1", OutputName: "x", CreatedAt: time.Now().UTC()},
+		{RunID: "run-ls", ProducerNodeID: "b", ProducerAttemptID: "1", OutputName: "y", CreatedAt: time.Now().UTC()},
+		{RunID: "other-run", ProducerNodeID: "c", ProducerAttemptID: "1", OutputName: "z", CreatedAt: time.Now().UTC()},
 	}
 	for _, a := range artifacts {
 		if err := s.PutArtifact(ctx, a); err != nil {
@@ -107,7 +107,7 @@ func TestMemoryStore_ListArtifactsBySampleRun(t *testing.T) {
 		}
 	}
 
-	list, err := s.ListArtifactsBySampleRun(ctx, "run-ls")
+	list, err := s.ListArtifactsByRun(ctx, "run-ls")
 	if err != nil {
 		t.Fatalf("ListArtifactsBySampleRun: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestMemoryStore_ListArtifactsBySampleRun(t *testing.T) {
 		t.Fatalf("len = %d, want 2", len(list))
 	}
 
-	emptyList, err := s.ListArtifactsBySampleRun(ctx, "no-such-run")
+	emptyList, err := s.ListArtifactsByRun(ctx, "no-such-run")
 	if err != nil {
 		t.Fatalf("ListArtifactsBySampleRun (empty): %v", err)
 	}
@@ -257,7 +257,7 @@ func TestMemoryStore_NodeTerminal_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	r := domain.NodeTerminalRecord{
-		SampleRunID:   "run-nt",
+		RunID:         "run-nt",
 		NodeID:        "node-a",
 		AttemptID:     "att-1",
 		TerminalState: "Succeeded",
@@ -290,14 +290,14 @@ func TestMemoryStore_GetNodeTerminal_NotFound(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_ListNodeTerminalsBySampleRun(t *testing.T) {
+func TestMemoryStore_ListNodeTerminalsByRun(t *testing.T) {
 	s := inventory.NewMemoryStore()
 	ctx := context.Background()
 
 	records := []domain.NodeTerminalRecord{
-		{SampleRunID: "run-list-nt", NodeID: "node-a", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
-		{SampleRunID: "run-list-nt", NodeID: "node-b", AttemptID: "1", TerminalState: "Failed", RecordedAt: time.Now().UTC()},
-		{SampleRunID: "other-run-nt", NodeID: "node-c", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
+		{RunID: "run-list-nt", NodeID: "node-a", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
+		{RunID: "run-list-nt", NodeID: "node-b", AttemptID: "1", TerminalState: "Failed", RecordedAt: time.Now().UTC()},
+		{RunID: "other-run-nt", NodeID: "node-c", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
 	}
 	for _, r := range records {
 		if err := s.RecordNodeTerminal(ctx, r); err != nil {
@@ -305,7 +305,7 @@ func TestMemoryStore_ListNodeTerminalsBySampleRun(t *testing.T) {
 		}
 	}
 
-	list, err := s.ListNodeTerminalsBySampleRun(ctx, "run-list-nt")
+	list, err := s.ListNodeTerminalsByRun(ctx, "run-list-nt")
 	if err != nil {
 		t.Fatalf("ListNodeTerminalsBySampleRun: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestMemoryStore_RecordNodeTerminal_SameStateIdempotent(t *testing.T) {
 	ctx := context.Background()
 
 	r := domain.NodeTerminalRecord{
-		SampleRunID:   "run-idem-nt",
+		RunID:         "run-idem-nt",
 		NodeID:        "node-a",
 		AttemptID:     "att-1",
 		TerminalState: "Succeeded",
@@ -342,8 +342,8 @@ func TestMemoryStore_SampleRunLifecycle_RoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC()
-	lc := domain.SampleRunLifecycle{
-		SampleRunID:           "run-lc-mem",
+	lc := domain.RunLifecycle{
+		RunID:                 "run-lc-mem",
 		Finalized:             true,
 		FinalizedAt:           &now,
 		RetentionPolicySource: "default",
@@ -355,11 +355,11 @@ func TestMemoryStore_SampleRunLifecycle_RoundTrip(t *testing.T) {
 		RetainedArtifactCount: 3,
 		RetainedArtifactBytes: 16384,
 	}
-	if err := s.UpsertSampleRunLifecycle(ctx, lc); err != nil {
+	if err := s.UpsertRunLifecycle(ctx, lc); err != nil {
 		t.Fatalf("UpsertSampleRunLifecycle: %v", err)
 	}
 
-	got, ok, err := s.GetSampleRunLifecycle(ctx, "run-lc-mem")
+	got, ok, err := s.GetRunLifecycle(ctx, "run-lc-mem")
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestMemoryStore_SampleRunLifecycle_RoundTrip(t *testing.T) {
 
 func TestMemoryStore_GetSampleRunLifecycle_NotFound(t *testing.T) {
 	s := inventory.NewMemoryStore()
-	_, ok, err := s.GetSampleRunLifecycle(context.Background(), "does-not-exist")
+	_, ok, err := s.GetRunLifecycle(context.Background(), "does-not-exist")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -392,22 +392,22 @@ func TestMemoryStore_UpsertSampleRunLifecycle_Overwrites(t *testing.T) {
 	s := inventory.NewMemoryStore()
 	ctx := context.Background()
 
-	lc := domain.SampleRunLifecycle{
-		SampleRunID:           "run-upsert",
+	lc := domain.RunLifecycle{
+		RunID:                 "run-upsert",
 		Finalized:             false,
 		RetainedArtifactCount: 1,
 	}
-	if err := s.UpsertSampleRunLifecycle(ctx, lc); err != nil {
+	if err := s.UpsertRunLifecycle(ctx, lc); err != nil {
 		t.Fatalf("first Upsert: %v", err)
 	}
 
 	lc.Finalized = true
 	lc.RetainedArtifactCount = 5
-	if err := s.UpsertSampleRunLifecycle(ctx, lc); err != nil {
+	if err := s.UpsertRunLifecycle(ctx, lc); err != nil {
 		t.Fatalf("second Upsert: %v", err)
 	}
 
-	got, ok, err := s.GetSampleRunLifecycle(ctx, "run-upsert")
+	got, ok, err := s.GetRunLifecycle(ctx, "run-upsert")
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestSQLiteStore_GetArtifactByID(t *testing.T) {
 	ctx := context.Background()
 
 	a := domain.Artifact{
-		SampleRunID:       "run-byid",
+		RunID:             "run-byid",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "att-1",
 		OutputName:        "out",
@@ -451,8 +451,8 @@ func TestSQLiteStore_GetArtifactByID(t *testing.T) {
 	if !ok {
 		t.Fatal("GetArtifactByID: not found")
 	}
-	if got.SampleRunID != a.SampleRunID {
-		t.Fatalf("SampleRunID = %q, want %q", got.SampleRunID, a.SampleRunID)
+	if got.RunID != a.RunID {
+		t.Fatalf("SampleRunID = %q, want %q", got.RunID, a.RunID)
 	}
 
 	_, ok2, err2 := s.GetArtifactByID(ctx, "no-such-id")
@@ -519,22 +519,22 @@ func TestSQLiteStore_ArtifactSources_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestSQLiteStore_ListNodeTerminalsBySampleRun(t *testing.T) {
+func TestSQLiteStore_ListNodeTerminalsByRun(t *testing.T) {
 	s, cleanup := openSQLite(t)
 	defer cleanup()
 	ctx := context.Background()
 
 	for _, r := range []domain.NodeTerminalRecord{
-		{SampleRunID: "run-list-term", NodeID: "node-a", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
-		{SampleRunID: "run-list-term", NodeID: "node-b", AttemptID: "1", TerminalState: "Failed", RecordedAt: time.Now().UTC()},
-		{SampleRunID: "other-run-term", NodeID: "node-c", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
+		{RunID: "run-list-term", NodeID: "node-a", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
+		{RunID: "run-list-term", NodeID: "node-b", AttemptID: "1", TerminalState: "Failed", RecordedAt: time.Now().UTC()},
+		{RunID: "other-run-term", NodeID: "node-c", AttemptID: "1", TerminalState: "Succeeded", RecordedAt: time.Now().UTC()},
 	} {
 		if err := s.RecordNodeTerminal(ctx, r); err != nil {
 			t.Fatalf("RecordNodeTerminal: %v", err)
 		}
 	}
 
-	list, err := s.ListNodeTerminalsBySampleRun(ctx, "run-list-term")
+	list, err := s.ListNodeTerminalsByRun(ctx, "run-list-term")
 	if err != nil {
 		t.Fatalf("ListNodeTerminalsBySampleRun: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestSQLiteStore_ListNodeTerminalsBySampleRun(t *testing.T) {
 		t.Fatalf("len = %d, want 2", len(list))
 	}
 
-	empty, err := s.ListNodeTerminalsBySampleRun(ctx, "no-such-run")
+	empty, err := s.ListNodeTerminalsByRun(ctx, "no-such-run")
 	if err != nil {
 		t.Fatalf("ListNodeTerminalsBySampleRun (empty): %v", err)
 	}
@@ -557,7 +557,7 @@ func TestSQLiteStore_PutArtifact_ClearDigestRejected(t *testing.T) {
 	ctx := context.Background()
 
 	a := domain.Artifact{
-		SampleRunID:       "run-clrdig",
+		RunID:             "run-clrdig",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "att-1",
 		OutputName:        "out",

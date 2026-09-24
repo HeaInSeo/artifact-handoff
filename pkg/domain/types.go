@@ -84,8 +84,12 @@ const (
 	ResolutionDecisionProducerFailed ResolutionDecision = "producer_failed"
 )
 
+// Artifact is one produced output. RunID is the canonical execution identity
+// (F4 Mode B): it keys the artifact, its terminal partition and its GC scope.
+// SampleRunID is grouping metadata only and never participates in identity.
 type Artifact struct {
-	SampleRunID       string     `json:"sampleRunId"`
+	RunID             string     `json:"runId"`
+	SampleRunID       string     `json:"sampleRunId,omitempty"`
 	ProducerNodeID    string     `json:"producerNodeId"`
 	ProducerAttemptID string     `json:"producerAttemptId"`
 	OutputName        string     `json:"outputName"`
@@ -115,7 +119,7 @@ func ValidateArtifactForRegistration(artifact Artifact) error {
 
 func (a Artifact) Key() string {
 	return ids.ArtifactKey{
-		SampleRunID:       a.SampleRunID,
+		RunID:             a.RunID,
 		ProducerNodeID:    a.ProducerNodeID,
 		ProducerAttemptID: a.ProducerAttemptID,
 		OutputName:        a.OutputName,
@@ -123,14 +127,15 @@ func (a Artifact) Key() string {
 }
 
 // CanonicalID returns the product-owned artifact identity.
-// Format: sampleRunId/producerNodeId/producerAttemptId/outputName
+// Format: run/runId/producerNodeId/producerAttemptId/outputName
 func (a Artifact) CanonicalID() string {
 	return a.Key()
 }
 
 type Binding struct {
 	BindingName        string        `json:"bindingName"`
-	SampleRunID        string        `json:"sampleRunId"`
+	RunID              string        `json:"runId"`
+	SampleRunID        string        `json:"sampleRunId,omitempty"`
 	ChildNodeID        string        `json:"childNodeId,omitempty"`
 	ChildInputName     string        `json:"childInputName,omitempty"`
 	ProducerNodeID     string        `json:"producerNodeId"`
@@ -145,7 +150,7 @@ type Binding struct {
 
 func (b Binding) Key() string {
 	return ids.ArtifactKey{
-		SampleRunID:       b.SampleRunID,
+		RunID:             b.RunID,
 		ProducerNodeID:    b.ProducerNodeID,
 		ProducerAttemptID: b.ProducerAttemptID,
 		OutputName:        b.ProducerOutputName,
@@ -473,15 +478,19 @@ type ResolvedHandoff struct {
 }
 
 type NodeTerminalRecord struct {
-	SampleRunID   string    `json:"sampleRunId"`
+	RunID         string    `json:"runId"`
 	NodeID        string    `json:"nodeId"`
 	AttemptID     string    `json:"attemptId"`
 	TerminalState string    `json:"terminalState"`
 	RecordedAt    time.Time `json:"recordedAt"`
 }
 
-type SampleRunLifecycle struct {
-	SampleRunID           string        `json:"sampleRunId"`
+// RunLifecycle is the finalize/retention/GC state of one Run (F4 Mode B). It is
+// keyed by RunID: two Runs of the same Sample never share a lifecycle, terminal
+// partition or GC scope. SampleRunID is recorded as grouping metadata only.
+type RunLifecycle struct {
+	RunID                 string        `json:"runId"`
+	SampleRunID           string        `json:"sampleRunId,omitempty"`
 	Finalized             bool          `json:"finalized"`
 	FinalizedAt           *time.Time    `json:"finalizedAt,omitempty"`
 	RetentionPolicySource string        `json:"retentionPolicySource,omitempty"`

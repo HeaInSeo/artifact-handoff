@@ -11,19 +11,27 @@ import (
 // Store is the backend-agnostic persistence contract.
 // Implementations: MemoryStore (tests / ephemeral), SQLiteStore (single-node persistence).
 // Future backends (PostgreSQL, etcd) implement this interface without touching callers.
+//
+// F4 Mode B: every identity lookup, terminal partition and lifecycle/GC scope is
+// keyed by RunID. SampleRunID is grouping metadata: ListArtifactsBySampleRun and
+// ListRunLifecyclesBySample group several Runs of one Sample without merging their
+// identities. Pre-F4 rows that carry no RunID are legacy-unresolved: no method
+// returns them and nothing attributes them to a Run (they are never GC-evaluated).
 type Store interface {
 	PutArtifact(ctx context.Context, artifact domain.Artifact) error
-	GetArtifact(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error)
+	GetArtifact(ctx context.Context, runID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error)
 	GetArtifactByID(ctx context.Context, artifactID string) (domain.Artifact, bool, error)
+	ListArtifactsByRun(ctx context.Context, runID string) ([]domain.Artifact, error)
 	ListArtifactsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.Artifact, error)
 	PutArtifactSources(ctx context.Context, artifactID string, sources []domain.ArtifactSource) error
 	GetArtifactSource(ctx context.Context, sourceID string) (domain.ArtifactSource, bool, error)
 	ListArtifactSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error)
-	ListNodeTerminalsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.NodeTerminalRecord, error)
+	ListNodeTerminalsByRun(ctx context.Context, runID string) ([]domain.NodeTerminalRecord, error)
 	RecordNodeTerminal(ctx context.Context, record domain.NodeTerminalRecord) error
-	GetNodeTerminal(ctx context.Context, sampleRunID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error)
-	UpsertSampleRunLifecycle(ctx context.Context, lifecycle domain.SampleRunLifecycle) error
-	GetSampleRunLifecycle(ctx context.Context, sampleRunID string) (domain.SampleRunLifecycle, bool, error)
+	GetNodeTerminal(ctx context.Context, runID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error)
+	UpsertRunLifecycle(ctx context.Context, lifecycle domain.RunLifecycle) error
+	GetRunLifecycle(ctx context.Context, runID string) (domain.RunLifecycle, bool, error)
+	ListRunLifecyclesBySample(ctx context.Context, sampleRunID string) ([]domain.RunLifecycle, error)
 }
 
 // OpenStore constructs a Store from a DSN string and returns a shutdown function.

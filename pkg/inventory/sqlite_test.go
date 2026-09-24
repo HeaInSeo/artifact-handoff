@@ -27,7 +27,7 @@ func TestSQLiteStore_ArtifactRoundTrip(t *testing.T) {
 
 	ctx := context.Background()
 	want := domain.Artifact{
-		SampleRunID:       "run-1",
+		RunID:             "run-1",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
@@ -74,22 +74,22 @@ func TestSQLiteStore_ArtifactNotFound(t *testing.T) {
 	}
 }
 
-func TestSQLiteStore_ListArtifactsBySampleRun(t *testing.T) {
+func TestSQLiteStore_ListArtifactsByRun(t *testing.T) {
 	s, cleanup := openSQLite(t)
 	defer cleanup()
 	ctx := context.Background()
 
 	for _, a := range []domain.Artifact{
-		{SampleRunID: "run-list", ProducerNodeID: "a", ProducerAttemptID: "1", OutputName: "x", URI: "u1", CreatedAt: time.Now().UTC()},
-		{SampleRunID: "run-list", ProducerNodeID: "b", ProducerAttemptID: "1", OutputName: "y", URI: "u2", CreatedAt: time.Now().UTC()},
-		{SampleRunID: "other-run", ProducerNodeID: "c", ProducerAttemptID: "1", OutputName: "z", URI: "u3", CreatedAt: time.Now().UTC()},
+		{RunID: "run-list", ProducerNodeID: "a", ProducerAttemptID: "1", OutputName: "x", URI: "u1", CreatedAt: time.Now().UTC()},
+		{RunID: "run-list", ProducerNodeID: "b", ProducerAttemptID: "1", OutputName: "y", URI: "u2", CreatedAt: time.Now().UTC()},
+		{RunID: "other-run", ProducerNodeID: "c", ProducerAttemptID: "1", OutputName: "z", URI: "u3", CreatedAt: time.Now().UTC()},
 	} {
 		if err := s.PutArtifact(ctx, a); err != nil {
 			t.Fatalf("PutArtifact: %v", err)
 		}
 	}
 
-	list, err := s.ListArtifactsBySampleRun(ctx, "run-list")
+	list, err := s.ListArtifactsByRun(ctx, "run-list")
 	if err != nil {
 		t.Fatalf("ListArtifactsBySampleRun: %v", err)
 	}
@@ -104,7 +104,7 @@ func TestSQLiteStore_NodeTerminalRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	want := domain.NodeTerminalRecord{
-		SampleRunID:   "run-term",
+		RunID:         "run-term",
 		NodeID:        "node-a",
 		AttemptID:     "attempt-1",
 		TerminalState: "Succeeded",
@@ -136,8 +136,8 @@ func TestSQLiteStore_SampleRunLifecycleRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	now := time.Now().UTC().Truncate(time.Second)
-	want := domain.SampleRunLifecycle{
-		SampleRunID:           "run-lc",
+	want := domain.RunLifecycle{
+		RunID:                 "run-lc",
 		Finalized:             true,
 		FinalizedAt:           &now,
 		RetentionPolicySource: "default",
@@ -150,11 +150,11 @@ func TestSQLiteStore_SampleRunLifecycleRoundTrip(t *testing.T) {
 		RetainedArtifactBytes: 8192,
 	}
 
-	if err := s.UpsertSampleRunLifecycle(ctx, want); err != nil {
+	if err := s.UpsertRunLifecycle(ctx, want); err != nil {
 		t.Fatalf("UpsertSampleRunLifecycle: %v", err)
 	}
 
-	got, ok, err := s.GetSampleRunLifecycle(ctx, "run-lc")
+	got, ok, err := s.GetRunLifecycle(ctx, "run-lc")
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestSQLiteStore_Persistence(t *testing.T) {
 	}
 
 	artifact := domain.Artifact{
-		SampleRunID:       "run-persist",
+		RunID:             "run-persist",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "result",
@@ -204,7 +204,7 @@ func TestSQLiteStore_Persistence(t *testing.T) {
 	}
 
 	termRec := domain.NodeTerminalRecord{
-		SampleRunID:   "run-persist",
+		RunID:         "run-persist",
 		NodeID:        "node-a",
 		AttemptID:     "attempt-1",
 		TerminalState: "Succeeded",
@@ -215,14 +215,14 @@ func TestSQLiteStore_Persistence(t *testing.T) {
 	}
 
 	now := time.Now().UTC().Truncate(time.Second)
-	lc := domain.SampleRunLifecycle{
-		SampleRunID:           "run-persist",
+	lc := domain.RunLifecycle{
+		RunID:                 "run-persist",
 		Finalized:             true,
 		FinalizedAt:           &now,
 		RetainedArtifactCount: 1,
 		RetainedArtifactBytes: 1024,
 	}
-	if err := s1.UpsertSampleRunLifecycle(ctx, lc); err != nil {
+	if err := s1.UpsertRunLifecycle(ctx, lc); err != nil {
 		t.Fatalf("UpsertSampleRunLifecycle: %v", err)
 	}
 
@@ -260,7 +260,7 @@ func TestSQLiteStore_Persistence(t *testing.T) {
 		t.Fatalf("terminalState = %q, want Succeeded", gotTerm.TerminalState)
 	}
 
-	gotLC, ok, err := s2.GetSampleRunLifecycle(ctx, "run-persist")
+	gotLC, ok, err := s2.GetRunLifecycle(ctx, "run-persist")
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle after restart: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestSQLiteStore_PutArtifact_DigestConflict(t *testing.T) {
 	ctx := context.Background()
 
 	base := domain.Artifact{
-		SampleRunID:       "run-conflict",
+		RunID:             "run-conflict",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
@@ -306,7 +306,7 @@ func TestSQLiteStore_PutArtifact_SameDigestIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 
 	a := domain.Artifact{
-		SampleRunID:       "run-idem",
+		RunID:             "run-idem",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
@@ -328,7 +328,7 @@ func TestSQLiteStore_RecordNodeTerminal_StateConflict(t *testing.T) {
 	ctx := context.Background()
 
 	base := domain.NodeTerminalRecord{
-		SampleRunID:   "run-term-conflict",
+		RunID:         "run-term-conflict",
 		NodeID:        "node-a",
 		AttemptID:     "attempt-1",
 		TerminalState: "Succeeded",
@@ -351,7 +351,7 @@ func TestSQLiteStore_RecordNodeTerminal_SameStateIsIdempotent(t *testing.T) {
 	ctx := context.Background()
 
 	r := domain.NodeTerminalRecord{
-		SampleRunID:   "run-term-idem",
+		RunID:         "run-term-idem",
 		NodeID:        "node-a",
 		AttemptID:     "attempt-1",
 		TerminalState: "Succeeded",
@@ -370,7 +370,7 @@ func TestMemoryStore_PutArtifact_DigestConflict(t *testing.T) {
 	ctx := context.Background()
 
 	base := domain.Artifact{
-		SampleRunID:       "run-mem-conflict",
+		RunID:             "run-mem-conflict",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "output",
@@ -394,7 +394,7 @@ func TestMemoryStore_RecordNodeTerminal_StateConflict(t *testing.T) {
 	ctx := context.Background()
 
 	base := domain.NodeTerminalRecord{
-		SampleRunID:   "run-mem-term-conflict",
+		RunID:         "run-mem-term-conflict",
 		NodeID:        "node-a",
 		AttemptID:     "attempt-1",
 		TerminalState: "Succeeded",

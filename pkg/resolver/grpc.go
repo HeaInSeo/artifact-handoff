@@ -43,6 +43,7 @@ func (s *grpcResolverServer) RegisterArtifact(ctx context.Context, req *ahv1.Reg
 	s.service.Metrics().IncGRPCRegisterArtifact()
 	artifact := req.GetArtifact()
 	state, err := s.service.RegisterArtifactCore(ctx, domain.Artifact{
+		RunID:             artifact.GetRunId(),
 		SampleRunID:       artifact.GetSampleRunId(),
 		ProducerNodeID:    artifact.GetProducerNodeId(),
 		ProducerAttemptID: artifact.GetProducerAttemptId(),
@@ -103,6 +104,7 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 	binding := req.GetBinding()
 	resolved, err := s.service.ResolveHandoffCore(ctx, domain.Binding{
 		BindingName:        binding.GetBindingName(),
+		RunID:              binding.GetRunId(),
 		SampleRunID:        binding.GetSampleRunId(),
 		ChildNodeID:        binding.GetChildNodeId(),
 		ChildInputName:     binding.GetChildInputName(),
@@ -142,42 +144,47 @@ func (s *grpcResolverServer) ResolveHandoff(ctx context.Context, req *ahv1.Resol
 
 func (s *grpcResolverServer) NotifyNodeTerminal(ctx context.Context, req *ahv1.NotifyNodeTerminalRequest) (*ahv1.NotifyNodeTerminalResponse, error) {
 	s.service.Metrics().IncGRPCNotifyNodeTerminal()
-	if err := s.service.NotifyNodeTerminalCore(ctx, req.GetSampleRunId(), req.GetNodeId(), req.GetAttemptId(), req.GetTerminalState()); err != nil {
+	if err := s.service.NotifyNodeTerminalCore(ctx, req.GetRunId(), req.GetNodeId(), req.GetAttemptId(), req.GetTerminalState()); err != nil {
 		return nil, toGRPCError(err)
 	}
 	return &ahv1.NotifyNodeTerminalResponse{Accepted: true}, nil
 }
 
+// FinalizeSampleRun keeps its pre-F4 wire name; it finalizes the Run named by run_id.
 func (s *grpcResolverServer) FinalizeSampleRun(ctx context.Context, req *ahv1.FinalizeSampleRunRequest) (*ahv1.FinalizeSampleRunResponse, error) {
 	s.service.Metrics().IncGRPCFinalizeSampleRun()
-	if err := s.service.FinalizeSampleRunCore(ctx, req.GetSampleRunId()); err != nil {
+	if err := s.service.FinalizeRunCore(ctx, req.GetRunId(), req.GetSampleRunId()); err != nil {
 		return nil, toGRPCError(err)
 	}
 	return &ahv1.FinalizeSampleRunResponse{Accepted: true}, nil
 }
 
+// EvaluateGC evaluates the GC scope of the Run named by run_id only.
 func (s *grpcResolverServer) EvaluateGC(ctx context.Context, req *ahv1.EvaluateGCRequest) (*ahv1.EvaluateGCResponse, error) {
 	s.service.Metrics().IncGRPCEvaluateGC()
-	if err := s.service.EvaluateGCCore(ctx, req.GetSampleRunId()); err != nil {
+	if err := s.service.EvaluateRunGCCore(ctx, req.GetRunId()); err != nil {
 		return nil, toGRPCError(err)
 	}
 	return &ahv1.EvaluateGCResponse{Accepted: true}, nil
 }
 
+// GetSampleRunLifecycle keeps its pre-F4 wire name; it returns the lifecycle of the
+// Run named by run_id.
 func (s *grpcResolverServer) GetSampleRunLifecycle(ctx context.Context, req *ahv1.GetSampleRunLifecycleRequest) (*ahv1.GetSampleRunLifecycleResponse, error) {
 	s.service.Metrics().IncGRPCGetLifecycle()
-	lifecycle, ok, err := s.service.GetSampleRunLifecycleCore(ctx, req.GetSampleRunId())
+	lifecycle, ok, err := s.service.GetRunLifecycleCore(ctx, req.GetRunId())
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
 	if !ok {
-		return nil, status.Error(codes.NotFound, "sample run lifecycle not found")
+		return nil, status.Error(codes.NotFound, "run lifecycle not found")
 	}
 	return lifecycleToGRPC(lifecycle), nil
 }
 
-func lifecycleToGRPC(lifecycle domain.SampleRunLifecycle) *ahv1.GetSampleRunLifecycleResponse {
+func lifecycleToGRPC(lifecycle domain.RunLifecycle) *ahv1.GetSampleRunLifecycleResponse {
 	resp := &ahv1.GetSampleRunLifecycleResponse{
+		RunId:                 lifecycle.RunID,
 		SampleRunId:           lifecycle.SampleRunID,
 		Finalized:             lifecycle.Finalized,
 		RetentionPolicySource: lifecycle.RetentionPolicySource,
