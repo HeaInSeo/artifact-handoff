@@ -40,7 +40,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 
 	registerResp, err := client.RegisterArtifact(ctx, &ahv1.RegisterArtifactRequest{
 		Artifact: &ahv1.ArtifactRef{
-			SampleRunId:       "sample-1",
+			RunId:             "sample-1",
 			ProducerNodeId:    "parent-a",
 			ProducerAttemptId: "attempt-1",
 			OutputName:        "output",
@@ -69,7 +69,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	resolveResp, err := client.ResolveHandoff(ctx, &ahv1.ResolveHandoffRequest{
 		Binding: &ahv1.ArtifactBinding{
 			BindingName:        "dataset",
-			SampleRunId:        "sample-1",
+			RunId:              "sample-1",
 			ProducerNodeId:     "parent-a",
 			ProducerAttemptId:  "attempt-1",
 			ProducerOutputName: "output",
@@ -92,7 +92,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	}
 
 	if _, err := client.NotifyNodeTerminal(ctx, &ahv1.NotifyNodeTerminalRequest{
-		SampleRunId:   "sample-1",
+		RunId:         "sample-1",
 		NodeId:        "parent-a",
 		AttemptId:     "attempt-1",
 		TerminalState: "Succeeded",
@@ -101,13 +101,13 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	}
 
 	if _, err := client.FinalizeSampleRun(ctx, &ahv1.FinalizeSampleRunRequest{
-		SampleRunId: "sample-1",
+		RunId: "sample-1",
 	}); err != nil {
 		t.Fatalf("FinalizeSampleRun() error = %v", err)
 	}
 
 	lifecycleResp, err := client.GetSampleRunLifecycle(ctx, &ahv1.GetSampleRunLifecycleRequest{
-		SampleRunId: "sample-1",
+		RunId: "sample-1",
 	})
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle() error = %v", err)
@@ -120,7 +120,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	}
 
 	addResp, err := client.AddSource(ctx, &ahv1.AddSourceRequest{
-		ArtifactId: "sample-1/parent-a/attempt-1/output",
+		ArtifactId: "run/sample-1/parent-a/attempt-1/output",
 		Source: &ahv1.ArtifactSource{
 			BackendId: "legacy-http",
 			Location: &ahv1.ArtifactLocation{
@@ -138,7 +138,7 @@ func TestGRPCRegisterResolveAndLifecycle(t *testing.T) {
 	}
 
 	listResp, err := client.ListSources(ctx, &ahv1.ListSourcesRequest{
-		ArtifactId: "sample-1/parent-a/attempt-1/output",
+		ArtifactId: "run/sample-1/parent-a/attempt-1/output",
 	})
 	if err != nil {
 		t.Fatalf("ListSources() error = %v", err)

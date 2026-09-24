@@ -56,7 +56,7 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 
 	// A produces output-a on worker-1.
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-A",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
@@ -75,7 +75,7 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 	// B resolves A's output while running on the same node.
 	bBinding := domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -109,7 +109,7 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 
 	// B produces output-b on the same node.
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-B",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-b",
@@ -127,7 +127,7 @@ func TestSimulateLinearABC_LocalReuse(t *testing.T) {
 	// C resolves B's output on the same node.
 	cBinding := domain.Binding{
 		BindingName:        "C-input-b",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-C",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-B",
@@ -153,7 +153,7 @@ func TestSimulateLinearABC_RemoteFetch(t *testing.T) {
 	svc := newTestService(t, inventory.NewMemoryStore())
 
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-A",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
@@ -165,7 +165,7 @@ func TestSimulateLinearABC_RemoteFetch(t *testing.T) {
 
 	bResolved := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -188,7 +188,7 @@ func TestSimulateLinearABC_RemoteFetch(t *testing.T) {
 	}
 
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-B",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-b",
@@ -200,7 +200,7 @@ func TestSimulateLinearABC_RemoteFetch(t *testing.T) {
 
 	cResolved := resolve(t, svc, domain.Binding{
 		BindingName:        "C-input-b",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-C",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-B",
@@ -226,7 +226,7 @@ func TestSimulateProducerPending(t *testing.T) {
 	// B tries to resolve before A has finished.
 	pendingResult := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -245,7 +245,7 @@ func TestSimulateProducerPending(t *testing.T) {
 	// A completes and registers its artifact.
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-A",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
@@ -257,7 +257,7 @@ func TestSimulateProducerPending(t *testing.T) {
 	// B retries and now gets RESOLVED.
 	retryResult := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -283,7 +283,7 @@ func TestSimulateProducerFailed(t *testing.T) {
 
 	result := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -309,7 +309,7 @@ func TestSimulateDigestMismatch(t *testing.T) {
 	svc := newTestService(t, inventory.NewMemoryStore())
 
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-A",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
@@ -323,7 +323,7 @@ func TestSimulateDigestMismatch(t *testing.T) {
 
 	result := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -347,7 +347,7 @@ func TestSimulateSameNodeOnlyViolation(t *testing.T) {
 	svc := newTestService(t, inventory.NewMemoryStore())
 
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-A",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
@@ -361,7 +361,7 @@ func TestSimulateSameNodeOnlyViolation(t *testing.T) {
 
 	result := resolve(t, svc, domain.Binding{
 		BindingName:        "B-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-B",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",
@@ -394,7 +394,7 @@ func TestSimulateGCExpiredRun(t *testing.T) {
 	svc.now = func() time.Time { return baseNow }
 
 	registerArtifact(t, svc, domain.Artifact{
-		SampleRunID:       simRun,
+		RunID:             simRun,
 		ProducerNodeID:    "node-A",
 		ProducerAttemptID: simAttempt,
 		OutputName:        "output-a",
@@ -407,20 +407,20 @@ func TestSimulateGCExpiredRun(t *testing.T) {
 	})
 	notifyTerminal(t, svc, simRun, "node-A", simAttempt, "Succeeded")
 
-	if err := svc.FinalizeSampleRun(context.Background(), simRun); err != nil {
+	if err := svc.FinalizeRun(context.Background(), simRun, ""); err != nil {
 		t.Fatalf("FinalizeSampleRun: %v", err)
 	}
 
 	// Advance past retention window (15 min) and mark GC eligible.
 	svc.now = func() time.Time { return baseNow.Add(20 * time.Minute) }
-	if err := svc.EvaluateGC(context.Background(), simRun); err != nil {
+	if err := svc.EvaluateRunGC(context.Background(), simRun); err != nil {
 		t.Fatalf("EvaluateGC: %v", err)
 	}
 
 	// C tries to resolve after the run is GC eligible.
 	result := resolve(t, svc, domain.Binding{
 		BindingName:        "C-input-a",
-		SampleRunID:        simRun,
+		RunID:              simRun,
 		ChildNodeID:        "node-C",
 		ChildAttemptID:     simAttempt,
 		ProducerNodeID:     "node-A",

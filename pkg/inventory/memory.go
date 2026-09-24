@@ -3,6 +3,8 @@ package inventory
 import (
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/HeaInSeo/artifact-handoff/internal/ids"
@@ -15,7 +17,7 @@ type MemoryStore struct {
 	sources             map[string]domain.ArtifactSource
 	sourcesByArtifactID map[string][]string
 	nodeTerminals       map[string]domain.NodeTerminalRecord
-	sampleRuns          map[string]domain.SampleRunLifecycle
+	runLifecycles       map[string]domain.RunLifecycle
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -24,11 +26,20 @@ func NewMemoryStore() *MemoryStore {
 		sources:             make(map[string]domain.ArtifactSource),
 		sourcesByArtifactID: make(map[string][]string),
 		nodeTerminals:       make(map[string]domain.NodeTerminalRecord),
-		sampleRuns:          make(map[string]domain.SampleRunLifecycle),
+		runLifecycles:       make(map[string]domain.RunLifecycle),
 	}
 }
 
+// errRunIDRequired is the store-level fail-closed guard (F4 Mode B): nothing is
+// persisted without a RunID, whatever the caller validated.
+func errRunIDRequired(what string) error {
+	return fmt.Errorf("%s: runID is required", what)
+}
+
 func (s *MemoryStore) PutArtifact(_ context.Context, artifact domain.Artifact) error {
+	if strings.TrimSpace(artifact.RunID) == "" {
+		return errRunIDRequired("put artifact")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	existing, exists := s.artifacts[artifact.Key()]
@@ -45,11 +56,11 @@ func (s *MemoryStore) PutArtifact(_ context.Context, artifact domain.Artifact) e
 	return nil
 }
 
-func (s *MemoryStore) GetArtifact(_ context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
+func (s *MemoryStore) GetArtifact(_ context.Context, runID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	artifact, ok := s.artifacts[ids.ArtifactKey{
-		SampleRunID:       sampleRunID,
+		RunID:             runID,
 		ProducerNodeID:    producerNodeID,
 		ProducerAttemptID: attemptID,
 		OutputName:        outputName,
@@ -66,6 +77,18 @@ func (s *MemoryStore) GetArtifactByID(_ context.Context, artifactID string) (dom
 		}
 	}
 	return domain.Artifact{}, false, nil
+}
+
+func (s *MemoryStore) ListArtifactsByRun(_ context.Context, runID string) ([]domain.Artifact, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Artifact, 0)
+	for _, artifact := range s.artifacts {
+		if artifact.RunID == runID {
+			out = append(out, artifact)
+		}
+	}
+	return out, nil
 }
 
 func (s *MemoryStore) ListArtifactsBySampleRun(_ context.Context, sampleRunID string) ([]domain.Artifact, error) {
@@ -120,12 +143,12 @@ func (s *MemoryStore) GetArtifactSource(_ context.Context, sourceID string) (dom
 	return source, ok, nil
 }
 
-func (s *MemoryStore) ListNodeTerminalsBySampleRun(_ context.Context, sampleRunID string) ([]domain.NodeTerminalRecord, error) {
+func (s *MemoryStore) ListNodeTerminalsByRun(_ context.Context, runID string) ([]domain.NodeTerminalRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]domain.NodeTerminalRecord, 0)
 	for _, record := range s.nodeTerminals {
-		if record.SampleRunID == sampleRunID {
+		if record.RunID == runID {
 			out = append(out, record)
 		}
 	}
@@ -133,12 +156,15 @@ func (s *MemoryStore) ListNodeTerminalsBySampleRun(_ context.Context, sampleRunI
 }
 
 func (s *MemoryStore) RecordNodeTerminal(_ context.Context, record domain.NodeTerminalRecord) error {
+	if strings.TrimSpace(record.RunID) == "" {
+		return errRunIDRequired("record node terminal")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := ids.NodeAttemptKey{
-		SampleRunID: record.SampleRunID,
-		NodeID:      record.NodeID,
-		AttemptID:   record.AttemptID,
+		RunID:     record.RunID,
+		NodeID:    record.NodeID,
+		AttemptID: record.AttemptID,
 	}.String()
 	existing, exists := s.nodeTerminals[key]
 	if exists {
@@ -146,35 +172,51 @@ func (s *MemoryStore) RecordNodeTerminal(_ context.Context, record domain.NodeTe
 			return nil // same state, idempotent
 		}
 		return fmt.Errorf("node %s/%s attempt %s: terminal state conflict: already %s, rejecting %s",
-			record.SampleRunID, record.NodeID, record.AttemptID, existing.TerminalState, record.TerminalState)
+			record.RunID, record.NodeID, record.AttemptID, existing.TerminalState, record.TerminalState)
 	}
 	s.nodeTerminals[key] = record
 	return nil
 }
 
-func (s *MemoryStore) GetNodeTerminal(_ context.Context, sampleRunID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error) {
+func (s *MemoryStore) GetNodeTerminal(_ context.Context, runID, nodeID, attemptID string) (domain.NodeTerminalRecord, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	record, ok := s.nodeTerminals[ids.NodeAttemptKey{
-		SampleRunID: sampleRunID,
-		NodeID:      nodeID,
-		AttemptID:   attemptID,
+		RunID:     runID,
+		NodeID:    nodeID,
+		AttemptID: attemptID,
 	}.String()]
 	return record, ok, nil
 }
 
-func (s *MemoryStore) UpsertSampleRunLifecycle(_ context.Context, lifecycle domain.SampleRunLifecycle) error {
+func (s *MemoryStore) UpsertRunLifecycle(_ context.Context, lifecycle domain.RunLifecycle) error {
+	if strings.TrimSpace(lifecycle.RunID) == "" {
+		return errRunIDRequired("upsert run lifecycle")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sampleRuns[lifecycle.SampleRunID] = lifecycle
+	s.runLifecycles[lifecycle.RunID] = lifecycle
 	return nil
 }
 
-func (s *MemoryStore) GetSampleRunLifecycle(_ context.Context, sampleRunID string) (domain.SampleRunLifecycle, bool, error) {
+func (s *MemoryStore) GetRunLifecycle(_ context.Context, runID string) (domain.RunLifecycle, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	lifecycle, ok := s.sampleRuns[sampleRunID]
+	lifecycle, ok := s.runLifecycles[runID]
 	return lifecycle, ok, nil
+}
+
+func (s *MemoryStore) ListRunLifecyclesBySample(_ context.Context, sampleRunID string) ([]domain.RunLifecycle, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.RunLifecycle, 0)
+	for _, lifecycle := range s.runLifecycles {
+		if lifecycle.SampleRunID == sampleRunID {
+			out = append(out, lifecycle)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RunID < out[j].RunID })
+	return out, nil
 }
 
 func containsString(values []string, want string) bool {
