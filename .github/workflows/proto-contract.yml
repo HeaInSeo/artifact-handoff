@@ -58,6 +58,4 @@ jobs:
         run: bash scripts/proto-drift-check-test.sh
 
       - name: Regenerate and check for drift
-        run: |
-          buf generate
-          ./scripts/proto-drift-check.sh
+        run: ./scripts/proto-drift-check.sh
