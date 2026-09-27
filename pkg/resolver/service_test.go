@@ -425,6 +425,16 @@ func TestListSourcesExcludesDeletedByDefault(t *testing.T) {
 	service := newTestService(t, store)
 	artifactID := "run/sample-sources/producer-a/attempt-1/dataset"
 
+	if err := store.PutArtifact(context.Background(), domain.Artifact{
+		RunID:             "sample-sources",
+		ProducerNodeID:    "producer-a",
+		ProducerAttemptID: "attempt-1",
+		OutputName:        "dataset",
+		ArtifactID:        artifactID,
+		Digest:            "sha256:abc123",
+	}); err != nil {
+		t.Fatalf("put artifact: %v", err)
+	}
 	if err := store.PutArtifactSources(context.Background(), artifactID, []domain.ArtifactSource{
 		{
 			SourceID:   "src-ready",

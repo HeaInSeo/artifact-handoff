@@ -219,6 +219,13 @@ func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]dom
 	if artifactID == "" {
 		return nil, fmt.Errorf("artifactID is required: %w", ErrInvalidArgument)
 	}
+	// Sources are reachable only through a live Run-keyed artifact: a legacy-unresolved
+	// (pre-F4) artifact ID is not found, so its source locations are never returned.
+	if _, ok, err := s.store.GetArtifactByID(ctx, artifactID); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, fmt.Errorf("artifact %q not found: %w", artifactID, ErrNotFound)
+	}
 	sources, err := s.store.ListArtifactSources(ctx, artifactID)
 	if err != nil {
 		return nil, err
@@ -291,6 +298,13 @@ func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, st
 	}
 	if !ok {
 		return domain.ArtifactSource{}, fmt.Errorf("source %q not found: %w", sourceID, ErrNotFound)
+	}
+	// Only a source of a live Run-keyed artifact may change state; a legacy-unresolved
+	// source is left exactly as the pre-F4 binary wrote it.
+	if _, ok, err := s.store.GetArtifactByID(ctx, source.ArtifactID); err != nil {
+		return domain.ArtifactSource{}, err
+	} else if !ok {
+		return domain.ArtifactSource{}, fmt.Errorf("artifact %q not found: %w", source.ArtifactID, ErrNotFound)
 	}
 	source.State = state
 	source.UpdatedAt = s.now()

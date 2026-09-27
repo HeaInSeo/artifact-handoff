@@ -468,6 +468,7 @@ func TestSQLiteStore_ArtifactSources_RoundTrip(t *testing.T) {
 	s, cleanup := openSQLite(t)
 	defer cleanup()
 	ctx := context.Background()
+	putLiveArtifact(t, s, "art-sqlite-src")
 
 	sources := []domain.ArtifactSource{
 		{
@@ -575,10 +576,23 @@ func TestSQLiteStore_PutArtifact_ClearDigestRejected(t *testing.T) {
 	}
 }
 
+// putLiveArtifact stores a Run-keyed artifact with the given ID; SQLite returns a source
+// only while its artifact is live.
+func putLiveArtifact(t *testing.T, s inventory.Store, artifactID string) {
+	t.Helper()
+	if err := s.PutArtifact(context.Background(), domain.Artifact{
+		RunID: "run-" + artifactID, ProducerNodeID: "p", ProducerAttemptID: "a", OutputName: "o",
+		ArtifactID: artifactID, Digest: "sha256:abc", CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("PutArtifact(%s): %v", artifactID, err)
+	}
+}
+
 func TestSQLiteStore_ArtifactSources_BackfillsArtifactID(t *testing.T) {
 	s, cleanup := openSQLite(t)
 	defer cleanup()
 	ctx := context.Background()
+	putLiveArtifact(t, s, "art-bfill")
 
 	sources := []domain.ArtifactSource{
 		{

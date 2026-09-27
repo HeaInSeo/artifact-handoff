@@ -49,15 +49,45 @@ pre-F4 `sample_run_lifecycles` table is never read. `SQLiteStore.LegacyDispositi
 reports the recorded counts. Binaries older than this change do not read the schema
 version, so the downgrade refusal protects only from this version onward.
 
+`artifact_sources` has no `run_id` column; a source row is reachable only through a live
+Run-keyed artifact. `GetArtifactSource` / `ListArtifactSources` return a source only while
+its artifact has a non-empty `run_id`, and `ListSources` / `UpdateSourceState` (like
+`AddSource` / `VerifySource`) return `NOT_FOUND` for a legacy-unresolved artifact or source.
+A legacy source row is therefore never returned or mutated, and it is kept as-is.
+
+## Rollback (operational)
+
+Rolling the binary back **across** this migration is not supported. A pre-F4 binary does
+not read `ah_schema_meta.schema_version`, so it opens a version-2 store without refusing
+it, and its `sample_run_id` lookups would then read Run-keyed rows under Sample identity.
+Never start a pre-F4 binary against a store this version has opened.
+
+If a rollback is required:
+
+1. Stop every artifact-handoff process that writes to the store.
+2. Check the store: `SELECT value FROM ah_schema_meta WHERE key = 'schema_version'`.
+   A result of `2` means the store has been migrated and must not be given to a pre-F4
+   binary.
+3. Either restore the pre-migration backup of the **same** store (taken before the first
+   start of this version) and verify that `ah_schema_meta` is absent, then start the
+   pre-F4 binary; or roll forward instead — fix and redeploy a schema-v2-aware binary
+   against the migrated store. This version does not take a backup itself; without a
+   matching pre-migration backup, rolling forward is the only option.
+4. Run-keyed data written after the migration is not in the pre-migration backup. A
+   restore discards it; do not try to copy it back into a pre-F4 store by SampleRunID.
+
+This change does not perform any restore or deploy, and it does not backfill or delete
+legacy rows.
+
 ## Acceptance evidence (tests)
 
 | R10 | Test |
 |---|---|
 | 1 same Sample R1/R2 distinct identity | `TestR10_SameSampleRunsHaveDistinctIdentity` |
-| 2 R1 GC does not touch R2 | `TestR10_R1GCDoesNotTouchR2` |
+| 2 R1 GC does not touch R2 | `TestR10_R1GCDoesNotTouchR2`, `TestF1_SourcesAreRunScoped` |
 | 3 sample metadata does not change the key | `TestR10_SampleMetadataDoesNotChangeKey` |
 | 4 missing RunID fails closed (service + gRPC) | `TestR10_MissingRunIDFailsClosed`, `TestSQLite_WritesRequireRunID`, `TestKeysRequireRunID` |
-| 5 ambiguous legacy row not attributed | `TestSQLite_LegacyRowsAreQuarantinedNotAttributed` |
+| 5 ambiguous legacy row not attributed | `TestSQLite_LegacyRowsAreQuarantinedNotAttributed`, `TestF1_LegacySourcesAreQuarantined` |
 | 6 multiple Runs per Sample listable, not merged | `TestR10_SampleGroupingListsRunsWithoutMergingIdentity` |
 | 7 no cross-Run key collision under concurrency | `TestR10_ConcurrentRunsDoNotCollide`, `TestRunKeysDisjointFromLegacySampleKeys` |
 | A2 schema downgrade refusal | `TestSQLite_RefusesNewerSchemaVersion` |

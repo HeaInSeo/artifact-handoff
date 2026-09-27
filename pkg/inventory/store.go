@@ -17,6 +17,8 @@ import (
 // ListRunLifecyclesBySample group several Runs of one Sample without merging their
 // identities. Pre-F4 rows that carry no RunID are legacy-unresolved: no method
 // returns them and nothing attributes them to a Run (they are never GC-evaluated).
+// Source reads (GetArtifactSource, ListArtifactSources) follow the same rule: a source
+// is returned only while its artifact is a live Run-keyed row.
 type Store interface {
 	PutArtifact(ctx context.Context, artifact domain.Artifact) error
 	GetArtifact(ctx context.Context, runID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error)

@@ -478,12 +478,16 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 	return tx.Commit()
 }
 
+// liveSourceFilter restricts a source read to sources of a live Run-keyed artifact, so a
+// legacy-unresolved (pre-F4) source row is never returned, like its artifact.
+const liveSourceFilter = `EXISTS (SELECT 1 FROM artifacts a WHERE a.artifact_id = artifact_sources.artifact_id AND a.run_id <> '')`
+
 func (s *SQLiteStore) ListArtifactSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT source_id, artifact_id, backend_id, digest, state,
 		       location_fingerprint, location_json, created_at, updated_at, last_verified_at, last_error
 		FROM artifact_sources
-		WHERE artifact_id = ?
+		WHERE artifact_id = ? AND `+liveSourceFilter+`
 		ORDER BY source_id ASC`, artifactID)
 	if err != nil {
 		return nil, err
@@ -518,7 +522,7 @@ func (s *SQLiteStore) GetArtifactSource(ctx context.Context, sourceID string) (d
 		SELECT source_id, artifact_id, backend_id, digest, state,
 		       location_fingerprint, location_json, created_at, updated_at, last_verified_at, last_error
 		FROM artifact_sources
-		WHERE source_id = ?`, sourceID)
+		WHERE source_id = ? AND `+liveSourceFilter, sourceID)
 	var source domain.ArtifactSource
 	var state string
 	var locationJSON string
