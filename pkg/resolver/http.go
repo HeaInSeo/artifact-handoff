@@ -35,7 +35,8 @@ func NewHTTPHandler(service *Service) http.Handler {
 			return
 		}
 		artifact := req.Artifact
-		if artifact.SampleRunID == "" &&
+		if artifact.RunID == "" &&
+			artifact.SampleRunID == "" &&
 			artifact.ProducerNodeID == "" &&
 			artifact.ProducerAttemptID == "" &&
 			artifact.OutputName == "" &&
@@ -68,7 +69,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 		}
 		artifact, ok, err := service.GetArtifactCore(
 			r.Context(),
-			r.URL.Query().Get("sampleRunId"),
+			r.URL.Query().Get("runId"),
 			r.URL.Query().Get("producerNodeId"),
 			r.URL.Query().Get("attemptId"),
 			r.URL.Query().Get("outputName"),
@@ -88,12 +89,34 @@ func NewHTTPHandler(service *Service) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		artifacts, err := service.ListArtifactsBySampleRunCore(r.Context(), r.URL.Query().Get("sampleRunId"))
+		// runId lists one Run's artifacts. sampleRunId alone is a grouping query over
+		// every Run of the Sample; each artifact keeps its own runId.
+		var (
+			artifacts []domain.Artifact
+			err       error
+		)
+		if runID := r.URL.Query().Get("runId"); runID != "" {
+			artifacts, err = service.ListArtifactsByRunCore(r.Context(), runID)
+		} else {
+			artifacts, err = service.ListArtifactsBySampleRunCore(r.Context(), r.URL.Query().Get("sampleRunId"))
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		writeJSON(w, map[string][]domain.Artifact{"artifacts": artifacts})
+	})
+	mux.HandleFunc("/v1/sampleRuns:runs", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		runs, err := service.ListRunsBySampleCore(r.Context(), r.URL.Query().Get("sampleRunId"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, map[string][]domain.RunLifecycle{"runs": runs})
 	})
 	mux.HandleFunc("/v1/sources:list", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -196,7 +219,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			return
 		}
 		var req struct {
-			SampleRunID   string `json:"sampleRunId"`
+			RunID         string `json:"runId"`
 			NodeID        string `json:"nodeId"`
 			AttemptID     string `json:"attemptId"`
 			TerminalState string `json:"terminalState"`
@@ -205,7 +228,7 @@ func NewHTTPHandler(service *Service) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := service.NotifyNodeTerminalCore(r.Context(), req.SampleRunID, req.NodeID, req.AttemptID, req.TerminalState); err != nil {
+		if err := service.NotifyNodeTerminalCore(r.Context(), req.RunID, req.NodeID, req.AttemptID, req.TerminalState); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -217,13 +240,14 @@ func NewHTTPHandler(service *Service) http.Handler {
 			return
 		}
 		var req struct {
+			RunID       string `json:"runId"`
 			SampleRunID string `json:"sampleRunId"`
 		}
 		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := service.FinalizeSampleRunCore(r.Context(), req.SampleRunID); err != nil {
+		if err := service.FinalizeRunCore(r.Context(), req.RunID, req.SampleRunID); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -235,13 +259,13 @@ func NewHTTPHandler(service *Service) http.Handler {
 			return
 		}
 		var req struct {
-			SampleRunID string `json:"sampleRunId"`
+			RunID string `json:"runId"`
 		}
 		if err := decodeJSON(w, r, &req); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := service.EvaluateGCCore(r.Context(), req.SampleRunID); err != nil {
+		if err := service.EvaluateRunGCCore(r.Context(), req.RunID); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -252,14 +276,13 @@ func NewHTTPHandler(service *Service) http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		sampleRunID := r.URL.Query().Get("sampleRunId")
-		lifecycle, ok, err := service.GetSampleRunLifecycleCore(r.Context(), sampleRunID)
+		lifecycle, ok, err := service.GetRunLifecycleCore(r.Context(), r.URL.Query().Get("runId"))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		if !ok {
-			http.Error(w, "sample run lifecycle not found", http.StatusNotFound)
+			http.Error(w, "run lifecycle not found", http.StatusNotFound)
 			return
 		}
 		writeJSON(w, lifecycle)
@@ -286,8 +309,10 @@ func canonicalizeLegacyHTTPArtifactID(artifact *domain.Artifact) {
 		return
 	}
 
+	// The pre-canonical HTTP form was "<identity>:<node>:<output>". The identity is
+	// the RunID now (F4 Mode B); a SampleRunID-built alias is not accepted.
 	legacyID := strings.Join([]string{
-		artifact.SampleRunID,
+		artifact.RunID,
 		artifact.ProducerNodeID,
 		artifact.OutputName,
 	}, ":")

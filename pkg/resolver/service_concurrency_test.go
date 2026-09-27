@@ -35,18 +35,18 @@ func (f *faultInjectingStore) PutArtifact(ctx context.Context, artifact domain.A
 	return f.Store.PutArtifact(ctx, artifact)
 }
 
-func (f *faultInjectingStore) UpsertSampleRunLifecycle(ctx context.Context, lifecycle domain.SampleRunLifecycle) error {
+func (f *faultInjectingStore) UpsertRunLifecycle(ctx context.Context, lifecycle domain.RunLifecycle) error {
 	if f.failUpsertLifecycle {
 		return errInjectedStoreFailure
 	}
-	return f.Store.UpsertSampleRunLifecycle(ctx, lifecycle)
+	return f.Store.UpsertRunLifecycle(ctx, lifecycle)
 }
 
-func (f *faultInjectingStore) GetSampleRunLifecycle(ctx context.Context, sampleRunID string) (domain.SampleRunLifecycle, bool, error) {
+func (f *faultInjectingStore) GetRunLifecycle(ctx context.Context, sampleRunID string) (domain.RunLifecycle, bool, error) {
 	if f.failGetSampleRunLifecycle {
-		return domain.SampleRunLifecycle{}, false, errInjectedStoreFailure
+		return domain.RunLifecycle{}, false, errInjectedStoreFailure
 	}
-	return f.Store.GetSampleRunLifecycle(ctx, sampleRunID)
+	return f.Store.GetRunLifecycle(ctx, sampleRunID)
 }
 
 func TestRegisterArtifact_PropagatesStoreWriteFailure(t *testing.T) {
@@ -54,7 +54,7 @@ func TestRegisterArtifact_PropagatesStoreWriteFailure(t *testing.T) {
 	service := newTestService(t, store)
 
 	_, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:       "sample-1",
+		RunID:             "sample-1",
 		ProducerNodeID:    "parent-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
@@ -80,7 +80,7 @@ func TestEvaluateGC_PropagatesStoreWriteFailure(t *testing.T) {
 	service := newTestService(t, store)
 
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:       "sample-2",
+		RunID:             "sample-2",
 		ProducerNodeID:    "parent-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
@@ -91,7 +91,7 @@ func TestEvaluateGC_PropagatesStoreWriteFailure(t *testing.T) {
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-2", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
-	if err := service.FinalizeSampleRun(context.Background(), "sample-2"); err != nil {
+	if err := service.FinalizeRun(context.Background(), "sample-2", ""); err != nil {
 		t.Fatalf("finalize sample run: %v", err)
 	}
 
@@ -99,20 +99,20 @@ func TestEvaluateGC_PropagatesStoreWriteFailure(t *testing.T) {
 	// GCEligible=false, GCBlockedReason="gc_not_evaluated"). Capture it so we
 	// can assert the failed EvaluateGC below leaves it untouched rather than
 	// silently applying a partial update.
-	before, ok, err := store.GetSampleRunLifecycle(context.Background(), "sample-2")
+	before, ok, err := store.GetRunLifecycle(context.Background(), "sample-2")
 	if err != nil || !ok {
 		t.Fatalf("get lifecycle before failed GC: ok=%v err=%v", ok, err)
 	}
 
 	store.failUpsertLifecycle = true
-	if err := service.EvaluateGC(context.Background(), "sample-2"); !errors.Is(err, errInjectedStoreFailure) {
+	if err := service.EvaluateRunGC(context.Background(), "sample-2"); !errors.Is(err, errInjectedStoreFailure) {
 		t.Fatalf("EvaluateGC() error = %v, want errInjectedStoreFailure", err)
 	}
 
 	// A failed Upsert must not leave a corrupted/partial lifecycle behind -
 	// the pre-existing record should be byte-for-byte unchanged.
 	store.failUpsertLifecycle = false
-	after, found, err := store.GetSampleRunLifecycle(context.Background(), "sample-2")
+	after, found, err := store.GetRunLifecycle(context.Background(), "sample-2")
 	if err != nil {
 		t.Fatalf("GetSampleRunLifecycle() error = %v", err)
 	}
@@ -129,7 +129,7 @@ func TestResolveHandoff_PropagatesStoreReadFailure(t *testing.T) {
 	service := newTestService(t, store)
 
 	_, err := service.ResolveHandoff(context.Background(), domain.Binding{
-		SampleRunID:        "sample-3",
+		RunID:              "sample-3",
 		ProducerNodeID:     "parent-a",
 		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
@@ -176,7 +176,7 @@ func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	// would deterministically resolve UNAVAILABLE once scheduled off-node,
 	// which is a fixture bug, not the race this test targets.
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:       "sample-race",
+		RunID:             "sample-race",
 		ProducerNodeID:    "parent-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
@@ -190,7 +190,7 @@ func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-race", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
-	if err := service.FinalizeSampleRun(context.Background(), "sample-race"); err != nil {
+	if err := service.FinalizeRun(context.Background(), "sample-race", ""); err != nil {
 		t.Fatalf("finalize sample run: %v", err)
 	}
 
@@ -201,7 +201,7 @@ func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	nowMu.Unlock()
 
 	binding := domain.Binding{
-		SampleRunID:        "sample-race",
+		RunID:              "sample-race",
 		ProducerNodeID:     "parent-a",
 		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
@@ -217,7 +217,7 @@ func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			if err := service.EvaluateGC(context.Background(), "sample-race"); err != nil {
+			if err := service.EvaluateRunGC(context.Background(), "sample-race"); err != nil {
 				errCh <- err
 			}
 		}
@@ -259,7 +259,7 @@ func TestConcurrentGCAndResolve_RaceSafeAndConsistent(t *testing.T) {
 	// the retention window, so the final state must be GC-eligible - proving
 	// the eventual state converges correctly even though individual
 	// concurrent resolves may have observed either status along the way.
-	lifecycle, ok, err := service.GetSampleRunLifecycle(context.Background(), "sample-race")
+	lifecycle, ok, err := service.GetRunLifecycle(context.Background(), "sample-race")
 	if err != nil {
 		t.Fatalf("get lifecycle: %v", err)
 	}
@@ -288,12 +288,12 @@ type gatedUpsertStore struct {
 	upsertGate    chan struct{}
 }
 
-func (s *gatedUpsertStore) UpsertSampleRunLifecycle(ctx context.Context, lifecycle domain.SampleRunLifecycle) error {
+func (s *gatedUpsertStore) UpsertRunLifecycle(ctx context.Context, lifecycle domain.RunLifecycle) error {
 	if s.armed.Load() {
 		close(s.upsertEntered)
 		<-s.upsertGate
 	}
-	return s.Store.UpsertSampleRunLifecycle(ctx, lifecycle)
+	return s.Store.UpsertRunLifecycle(ctx, lifecycle)
 }
 
 // TestConcurrentGCAndResolve_ForcedInterleaving deterministically exercises
@@ -317,7 +317,7 @@ func TestConcurrentGCAndResolve_ForcedInterleaving(t *testing.T) {
 	service.now = func() time.Time { return baseNow }
 
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:       "sample-forced-race",
+		RunID:             "sample-forced-race",
 		ProducerNodeID:    "parent-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
@@ -331,13 +331,13 @@ func TestConcurrentGCAndResolve_ForcedInterleaving(t *testing.T) {
 	if err := service.NotifyNodeTerminal(context.Background(), "sample-forced-race", "parent-a", "attempt-1", "Succeeded"); err != nil {
 		t.Fatalf("notify terminal: %v", err)
 	}
-	if err := service.FinalizeSampleRun(context.Background(), "sample-forced-race"); err != nil {
+	if err := service.FinalizeRun(context.Background(), "sample-forced-race", ""); err != nil {
 		t.Fatalf("finalize sample run: %v", err)
 	}
 	baseNow = baseNow.Add(16 * time.Minute) // past the retention window
 
 	binding := domain.Binding{
-		SampleRunID:        "sample-forced-race",
+		RunID:              "sample-forced-race",
 		ProducerNodeID:     "parent-a",
 		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",
@@ -347,7 +347,7 @@ func TestConcurrentGCAndResolve_ForcedInterleaving(t *testing.T) {
 	store.armed.Store(true)
 	gcErrCh := make(chan error, 1)
 	go func() {
-		gcErrCh <- service.EvaluateGC(context.Background(), "sample-forced-race")
+		gcErrCh <- service.EvaluateRunGC(context.Background(), "sample-forced-race")
 	}()
 
 	select {
@@ -391,7 +391,7 @@ func TestResolveHandoffTwiceReturnsIdenticalResult(t *testing.T) {
 	service := newTestService(t, store)
 
 	if _, err := service.RegisterArtifact(context.Background(), domain.Artifact{
-		SampleRunID:       "sample-repeat",
+		RunID:             "sample-repeat",
 		ProducerNodeID:    "parent-a",
 		ProducerAttemptID: "attempt-1",
 		OutputName:        "dataset",
@@ -403,7 +403,7 @@ func TestResolveHandoffTwiceReturnsIdenticalResult(t *testing.T) {
 	}
 
 	binding := domain.Binding{
-		SampleRunID:        "sample-repeat",
+		RunID:              "sample-repeat",
 		ProducerNodeID:     "parent-a",
 		ProducerAttemptID:  "attempt-1",
 		ProducerOutputName: "dataset",

@@ -10,6 +10,12 @@ package ah.v1;
 
 option go_package = "github.com/HeaInSeo/artifact-handoff/api/proto/ahv1";
 
+// F4 Mode B (RunID identity): `run_id` is the canonical execution identity and is
+// REQUIRED on every request below (a missing run_id is rejected with
+// INVALID_ARGUMENT; it is never derived from sample_run_id). `sample_run_id` keeps
+// its field number and is grouping metadata only. The run_id fields use new field
+// numbers; no existing number is reused or retyped.
+
 message ArtifactRef {
   string sample_run_id = 1;
   string producer_node_id = 2;
@@ -22,6 +28,7 @@ message ArtifactRef {
   string producer_attempt_id = 9;
   string logical_uri = 10;
   repeated ArtifactLocation locations = 11;
+  string run_id = 12;
 }
 
 message RegisterArtifactRequest {
@@ -45,6 +52,7 @@ message ArtifactBinding {
   string artifact_id = 10;
   string producer_attempt_id = 11;
   string child_attempt_id = 12;
+  string run_id = 13;
 }
 
 message ResolveHandoffRequest {
@@ -169,14 +177,18 @@ message NotifyNodeTerminalRequest {
   string node_id = 2;
   string terminal_state = 3;
   string attempt_id = 4;
+  string run_id = 5;
 }
 
 message NotifyNodeTerminalResponse {
   bool accepted = 1;
 }
 
+// The RPC names below keep their pre-F4 wire names; they act on the Run named by
+// run_id (its lifecycle, terminal partition and GC scope), never on a whole Sample.
 message FinalizeSampleRunRequest {
   string sample_run_id = 1;
+  string run_id = 2;
 }
 
 message FinalizeSampleRunResponse {
@@ -185,6 +197,7 @@ message FinalizeSampleRunResponse {
 
 message EvaluateGCRequest {
   string sample_run_id = 1;
+  string run_id = 2;
 }
 
 message EvaluateGCResponse {
@@ -193,6 +206,7 @@ message EvaluateGCResponse {
 
 message GetSampleRunLifecycleRequest {
   string sample_run_id = 1;
+  string run_id = 2;
 }
 
 message GetSampleRunLifecycleResponse {
@@ -211,6 +225,7 @@ message GetSampleRunLifecycleResponse {
   int32 canceled_node_count = 13;
   int32 retained_artifact_count = 14;
   int64 retained_artifact_bytes = 15;
+  string run_id = 16;
 }
 
 service ArtifactHandoffResolver {

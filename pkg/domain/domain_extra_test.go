@@ -65,7 +65,7 @@ func TestSourceState_Validate(t *testing.T) {
 
 func TestArtifactKey(t *testing.T) {
 	a := Artifact{
-		SampleRunID:       "run-1",
+		RunID:             "run-1",
 		ProducerNodeID:    "node-a",
 		ProducerAttemptID: "att-1",
 		OutputName:        "model",
@@ -91,7 +91,7 @@ func TestArtifactKey(t *testing.T) {
 
 func TestBindingKey(t *testing.T) {
 	b := Binding{
-		SampleRunID:        "run-1",
+		RunID:              "run-1",
 		ProducerNodeID:     "node-a",
 		ProducerAttemptID:  "att-1",
 		ProducerOutputName: "model",
@@ -120,7 +120,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "no_uri_ok",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 			},
 			wantErr: false,
@@ -128,7 +128,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "valid_https_uri",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				URI: "https://storage.example.com/bucket/artifact.bin",
 			},
@@ -137,7 +137,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "uri_with_userinfo_rejected",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				URI: "http://user:pass@host/path", // #nosec G101 -- test-only credential in URL string
 			},
@@ -146,7 +146,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "uri_with_query_rejected",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				URI: "http://host/path?key=value",
 			},
@@ -155,7 +155,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "non_http_scheme_rejected",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				URI: "ftp://host/file",
 			},
@@ -164,7 +164,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "empty_host_rejected",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				URI: "http:///path",
 			},
@@ -173,7 +173,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "valid_location_node_local",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				Locations: []Location{
 					{NodeLocal: &NodeLocalLocation{NodeName: "worker-1", Path: "/data/file"}},
@@ -184,7 +184,7 @@ func TestValidateArtifactForRegistration(t *testing.T) {
 		{
 			name: "invalid_location_empty",
 			a: Artifact{
-				SampleRunID: "run-1", ProducerNodeID: "node-a",
+				RunID: "run-1", ProducerNodeID: "node-a",
 				ProducerAttemptID: "att-1", OutputName: "x",
 				Locations: []Location{{}},
 			},

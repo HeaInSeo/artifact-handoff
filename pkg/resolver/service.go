@@ -55,28 +55,36 @@ func (s *Service) ResolveHandoff(ctx context.Context, binding domain.Binding, ta
 	return s.ResolveHandoffCore(ctx, binding, targetNodeName)
 }
 
-func (s *Service) NotifyNodeTerminal(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {
-	return s.NotifyNodeTerminalCore(ctx, sampleRunID, nodeID, attemptID, terminalState)
+func (s *Service) NotifyNodeTerminal(ctx context.Context, runID, nodeID, attemptID, terminalState string) error {
+	return s.NotifyNodeTerminalCore(ctx, runID, nodeID, attemptID, terminalState)
 }
 
-func (s *Service) FinalizeSampleRun(ctx context.Context, sampleRunID string) error {
-	return s.FinalizeSampleRunCore(ctx, sampleRunID)
+func (s *Service) FinalizeRun(ctx context.Context, runID, sampleRunID string) error {
+	return s.FinalizeRunCore(ctx, runID, sampleRunID)
 }
 
-func (s *Service) EvaluateGC(ctx context.Context, sampleRunID string) error {
-	return s.EvaluateGCCore(ctx, sampleRunID)
+func (s *Service) EvaluateRunGC(ctx context.Context, runID string) error {
+	return s.EvaluateRunGCCore(ctx, runID)
 }
 
-func (s *Service) GetSampleRunLifecycle(ctx context.Context, sampleRunID string) (domain.SampleRunLifecycle, bool, error) {
-	return s.GetSampleRunLifecycleCore(ctx, sampleRunID)
+func (s *Service) GetRunLifecycle(ctx context.Context, runID string) (domain.RunLifecycle, bool, error) {
+	return s.GetRunLifecycleCore(ctx, runID)
 }
 
-func (s *Service) GetArtifact(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
-	return s.GetArtifactCore(ctx, sampleRunID, producerNodeID, attemptID, outputName)
+func (s *Service) GetArtifact(ctx context.Context, runID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
+	return s.GetArtifactCore(ctx, runID, producerNodeID, attemptID, outputName)
+}
+
+func (s *Service) ListArtifactsByRun(ctx context.Context, runID string) ([]domain.Artifact, error) {
+	return s.ListArtifactsByRunCore(ctx, runID)
 }
 
 func (s *Service) ListArtifactsBySampleRun(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
 	return s.ListArtifactsBySampleRunCore(ctx, sampleRunID)
+}
+
+func (s *Service) ListRunsBySample(ctx context.Context, sampleRunID string) ([]domain.RunLifecycle, error) {
+	return s.ListRunsBySampleCore(ctx, sampleRunID)
 }
 
 func (s *Service) ListSources(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
@@ -95,15 +103,18 @@ func (s *Service) VerifySource(ctx context.Context, sourceID string) (domain.Art
 	return s.VerifySourceCore(ctx, sourceID)
 }
 
+// RegisterArtifactCore registers one produced output. F4 Mode B: RunID is the
+// required canonical identity (missing → InvalidArgument, never derived from
+// SampleRunID); SampleRunID is optional grouping metadata.
 func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Artifact) (domain.AvailabilityState, error) {
-	if artifact.SampleRunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
-		return "", fmt.Errorf("sampleRunID, producerNodeID, outputName are required: %w", ErrInvalidArgument)
+	if artifact.RunID == "" || artifact.ProducerNodeID == "" || artifact.OutputName == "" {
+		return "", fmt.Errorf("runID, producerNodeID, outputName are required: %w", ErrInvalidArgument)
 	}
 	if artifact.ProducerAttemptID == "" {
 		return "", fmt.Errorf("producerAttemptID is required: %w", ErrInvalidArgument)
 	}
 	if err := (ids.ArtifactKey{
-		SampleRunID:       artifact.SampleRunID,
+		RunID:             artifact.RunID,
 		ProducerNodeID:    artifact.ProducerNodeID,
 		ProducerAttemptID: artifact.ProducerAttemptID,
 		OutputName:        artifact.OutputName,
@@ -122,7 +133,7 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	}
 	// Enforce artifact immutability: same key + same digest = idempotent OK;
 	// same key + different digest, or clearing an existing digest = conflict error.
-	existing, exists, err := s.store.GetArtifact(ctx, artifact.SampleRunID, artifact.ProducerNodeID, artifact.ProducerAttemptID, artifact.OutputName)
+	existing, exists, err := s.store.GetArtifact(ctx, artifact.RunID, artifact.ProducerNodeID, artifact.ProducerAttemptID, artifact.OutputName)
 	if err != nil {
 		return "", err
 	}
@@ -169,16 +180,25 @@ func (s *Service) RegisterArtifactCore(ctx context.Context, artifact domain.Arti
 	}
 }
 
-func (s *Service) GetArtifactCore(ctx context.Context, sampleRunID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
-	if sampleRunID == "" || producerNodeID == "" || outputName == "" {
-		return domain.Artifact{}, false, fmt.Errorf("sampleRunID, producerNodeID, outputName are required: %w", ErrInvalidArgument)
+func (s *Service) GetArtifactCore(ctx context.Context, runID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error) {
+	if runID == "" || producerNodeID == "" || outputName == "" {
+		return domain.Artifact{}, false, fmt.Errorf("runID, producerNodeID, outputName are required: %w", ErrInvalidArgument)
 	}
 	if attemptID == "" {
 		return domain.Artifact{}, false, fmt.Errorf("attemptID is required: %w", ErrInvalidArgument)
 	}
-	return s.store.GetArtifact(ctx, sampleRunID, producerNodeID, attemptID, outputName)
+	return s.store.GetArtifact(ctx, runID, producerNodeID, attemptID, outputName)
 }
 
+func (s *Service) ListArtifactsByRunCore(ctx context.Context, runID string) ([]domain.Artifact, error) {
+	if runID == "" {
+		return nil, fmt.Errorf("runID is required: %w", ErrInvalidArgument)
+	}
+	return s.store.ListArtifactsByRun(ctx, runID)
+}
+
+// ListArtifactsBySampleRunCore groups the artifacts of every Run of one Sample. It is
+// a metadata query: each artifact keeps its own RunID identity.
 func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID string) ([]domain.Artifact, error) {
 	if sampleRunID == "" {
 		return nil, fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
@@ -186,9 +206,25 @@ func (s *Service) ListArtifactsBySampleRunCore(ctx context.Context, sampleRunID 
 	return s.store.ListArtifactsBySampleRun(ctx, sampleRunID)
 }
 
+// ListRunsBySampleCore lists the Run lifecycles recorded for one Sample. Each Run
+// keeps its own identity, terminal partition and GC scope.
+func (s *Service) ListRunsBySampleCore(ctx context.Context, sampleRunID string) ([]domain.RunLifecycle, error) {
+	if sampleRunID == "" {
+		return nil, fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
+	}
+	return s.store.ListRunLifecyclesBySample(ctx, sampleRunID)
+}
+
 func (s *Service) ListSourcesCore(ctx context.Context, artifactID string) ([]domain.ArtifactSource, error) {
 	if artifactID == "" {
 		return nil, fmt.Errorf("artifactID is required: %w", ErrInvalidArgument)
+	}
+	// Sources are reachable only through a live Run-keyed artifact: a legacy-unresolved
+	// (pre-F4) artifact ID is not found, so its source locations are never returned.
+	if _, ok, err := s.store.GetArtifactByID(ctx, artifactID); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, fmt.Errorf("artifact %q not found: %w", artifactID, ErrNotFound)
 	}
 	sources, err := s.store.ListArtifactSources(ctx, artifactID)
 	if err != nil {
@@ -240,11 +276,17 @@ func (s *Service) AddSourceCore(ctx context.Context, artifactID string, source d
 		return domain.ArtifactSource{}, err
 	}
 	if err := s.store.PutArtifactSources(ctx, artifactID, []domain.ArtifactSource{source}); err != nil {
+		if errors.Is(err, inventory.ErrSourceOwnershipConflict) {
+			return domain.ArtifactSource{}, fmt.Errorf("source %q belongs to another artifact: %w", source.SourceID, ErrAlreadyExists)
+		}
 		return domain.ArtifactSource{}, err
 	}
-	stored, _, err := s.store.GetArtifactSource(ctx, source.SourceID)
+	stored, ok, err := s.store.GetArtifactSource(ctx, source.SourceID)
 	if err != nil {
 		return domain.ArtifactSource{}, err
+	}
+	if !ok {
+		return domain.ArtifactSource{}, fmt.Errorf("source %q not found after write: %w", source.SourceID, ErrNotFound)
 	}
 	return stored, nil
 }
@@ -262,6 +304,13 @@ func (s *Service) UpdateSourceStateCore(ctx context.Context, sourceID string, st
 	}
 	if !ok {
 		return domain.ArtifactSource{}, fmt.Errorf("source %q not found: %w", sourceID, ErrNotFound)
+	}
+	// Only a source of a live Run-keyed artifact may change state; a legacy-unresolved
+	// source is left exactly as the pre-F4 binary wrote it.
+	if _, ok, err := s.store.GetArtifactByID(ctx, source.ArtifactID); err != nil {
+		return domain.ArtifactSource{}, err
+	} else if !ok {
+		return domain.ArtifactSource{}, fmt.Errorf("artifact %q not found: %w", source.ArtifactID, ErrNotFound)
 	}
 	source.State = state
 	source.UpdatedAt = s.now()
@@ -332,8 +381,8 @@ func (s *Service) VerifySourceCore(ctx context.Context, sourceID string) (domain
 
 func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding, targetNodeName string) (domain.ResolvedHandoff, error) {
 	s.metrics.IncResolveRequests()
-	if binding.SampleRunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
-		return domain.ResolvedHandoff{}, fmt.Errorf("binding sampleRunID, producerNodeID, producerOutputName are required: %w", ErrInvalidArgument)
+	if binding.RunID == "" || binding.ProducerNodeID == "" || binding.ProducerOutputName == "" {
+		return domain.ResolvedHandoff{}, fmt.Errorf("binding runID, producerNodeID, producerOutputName are required: %w", ErrInvalidArgument)
 	}
 	if binding.ProducerAttemptID == "" {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding producerAttemptID is required: %w", ErrInvalidArgument)
@@ -341,7 +390,9 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 	if err := binding.ConsumePolicy.Validate(); err != nil {
 		return domain.ResolvedHandoff{}, fmt.Errorf("binding %s: %w", binding.BindingName, err)
 	}
-	lifecycle, lifecycleFound, err := s.store.GetSampleRunLifecycle(ctx, binding.SampleRunID)
+	// The GC scope is the binding's own Run: another Run of the same Sample being
+	// GC-eligible never expires this binding.
+	lifecycle, lifecycleFound, err := s.store.GetRunLifecycle(ctx, binding.RunID)
 	if err != nil {
 		return domain.ResolvedHandoff{}, err
 	}
@@ -351,16 +402,16 @@ func (s *Service) ResolveHandoffCore(ctx context.Context, binding domain.Binding
 			Decision:            domain.ResolutionDecisionUnavailable,
 			PlacementIntent:     domain.PlacementIntent{Mode: domain.PlacementIntentModeNone},
 			MaterializationPlan: domain.MaterializationPlan{Mode: domain.MaterializationModeNone},
-			Reason:              "sample run is GC eligible",
+			Reason:              "run is GC eligible",
 			Retryable:           false,
 		}, nil
 	}
-	artifact, ok, err := s.store.GetArtifact(ctx, binding.SampleRunID, binding.ProducerNodeID, binding.ProducerAttemptID, binding.ProducerOutputName)
+	artifact, ok, err := s.store.GetArtifact(ctx, binding.RunID, binding.ProducerNodeID, binding.ProducerAttemptID, binding.ProducerOutputName)
 	if err != nil {
 		return domain.ResolvedHandoff{}, err
 	}
 	if !ok {
-		terminal, terminalFound, err := s.store.GetNodeTerminal(ctx, binding.SampleRunID, binding.ProducerNodeID, binding.ProducerAttemptID)
+		terminal, terminalFound, err := s.store.GetNodeTerminal(ctx, binding.RunID, binding.ProducerNodeID, binding.ProducerAttemptID)
 		if err != nil {
 			return domain.ResolvedHandoff{}, err
 		}
@@ -885,14 +936,14 @@ func firstReadyHTTPSource(sources []domain.ArtifactSource) *domain.ArtifactSourc
 	return nil
 }
 
-func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeID, attemptID, terminalState string) error {
-	if sampleRunID == "" || nodeID == "" || terminalState == "" {
-		return fmt.Errorf("sampleRunID, nodeID, terminalState are required: %w", ErrInvalidArgument)
+func (s *Service) NotifyNodeTerminalCore(ctx context.Context, runID, nodeID, attemptID, terminalState string) error {
+	if runID == "" || nodeID == "" || terminalState == "" {
+		return fmt.Errorf("runID, nodeID, terminalState are required: %w", ErrInvalidArgument)
 	}
 	if attemptID == "" {
 		return fmt.Errorf("attemptID is required: %w", ErrInvalidArgument)
 	}
-	if err := (ids.NodeAttemptKey{SampleRunID: sampleRunID, NodeID: nodeID, AttemptID: attemptID}).Validate(); err != nil {
+	if err := (ids.NodeAttemptKey{RunID: runID, NodeID: nodeID, AttemptID: attemptID}).Validate(); err != nil {
 		return fmt.Errorf("%w: %w", ErrInvalidArgument, err)
 	}
 	switch terminalState {
@@ -901,7 +952,7 @@ func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeI
 		return fmt.Errorf("unsupported terminalState %q: %w", terminalState, ErrInvalidArgument)
 	}
 	return s.store.RecordNodeTerminal(ctx, domain.NodeTerminalRecord{
-		SampleRunID:   sampleRunID,
+		RunID:         runID,
 		NodeID:        nodeID,
 		AttemptID:     attemptID,
 		TerminalState: terminalState,
@@ -909,17 +960,22 @@ func (s *Service) NotifyNodeTerminalCore(ctx context.Context, sampleRunID, nodeI
 	})
 }
 
-func (s *Service) FinalizeSampleRunCore(ctx context.Context, sampleRunID string) error {
-	if sampleRunID == "" {
-		return fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
+// FinalizeRunCore finalizes one Run's retention window. sampleRunID is optional
+// grouping metadata recorded on the Run's lifecycle; it never selects the Run.
+func (s *Service) FinalizeRunCore(ctx context.Context, runID, sampleRunID string) error {
+	if runID == "" {
+		return fmt.Errorf("runID is required: %w", ErrInvalidArgument)
 	}
 	now := s.now()
-	lifecycle, ok, err := s.store.GetSampleRunLifecycle(ctx, sampleRunID)
+	lifecycle, ok, err := s.store.GetRunLifecycle(ctx, runID)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		lifecycle = domain.SampleRunLifecycle{SampleRunID: sampleRunID}
+		lifecycle = domain.RunLifecycle{RunID: runID}
+	}
+	if lifecycle.SampleRunID == "" {
+		lifecycle.SampleRunID = sampleRunID
 	}
 	if lifecycle.Finalized {
 		return nil
@@ -937,19 +993,21 @@ func (s *Service) FinalizeSampleRunCore(ctx context.Context, sampleRunID string)
 	lifecycle.GCEligibleAt = nil
 	lifecycle.GCBlockedReason = "gc_not_evaluated"
 	s.metrics.SetGCBacklogBytes(0)
-	return s.store.UpsertSampleRunLifecycle(ctx, lifecycle)
+	return s.store.UpsertRunLifecycle(ctx, lifecycle)
 }
 
-func (s *Service) EvaluateGCCore(ctx context.Context, sampleRunID string) error {
-	if sampleRunID == "" {
-		return fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
+// EvaluateRunGCCore evaluates GC eligibility for exactly one Run. Its scope is that
+// Run's artifacts and terminals; other Runs of the same Sample are untouched.
+func (s *Service) EvaluateRunGCCore(ctx context.Context, runID string) error {
+	if runID == "" {
+		return fmt.Errorf("runID is required: %w", ErrInvalidArgument)
 	}
-	lifecycle, ok, err := s.store.GetSampleRunLifecycle(ctx, sampleRunID)
+	lifecycle, ok, err := s.store.GetRunLifecycle(ctx, runID)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		lifecycle = domain.SampleRunLifecycle{SampleRunID: sampleRunID}
+		lifecycle = domain.RunLifecycle{RunID: runID}
 	}
 	if err := s.refreshLifecycleSnapshot(ctx, &lifecycle); err != nil {
 		return err
@@ -958,7 +1016,7 @@ func (s *Service) EvaluateGCCore(ctx context.Context, sampleRunID string) error 
 	case !lifecycle.Finalized:
 		lifecycle.GCEligible = false
 		lifecycle.GCEligibleAt = nil
-		lifecycle.GCBlockedReason = "sample_run_not_finalized"
+		lifecycle.GCBlockedReason = "run_not_finalized"
 	case lifecycle.TerminalNodeCount == 0:
 		lifecycle.GCEligible = false
 		lifecycle.GCEligibleAt = nil
@@ -978,25 +1036,25 @@ func (s *Service) EvaluateGCCore(ctx context.Context, sampleRunID string) error 
 		lifecycle.GCBlockedReason = ""
 	}
 	s.metrics.SetGCBacklogBytes(float64(estimateGCBacklogBytes(lifecycle)))
-	return s.store.UpsertSampleRunLifecycle(ctx, lifecycle)
+	return s.store.UpsertRunLifecycle(ctx, lifecycle)
 }
 
-func (s *Service) GetSampleRunLifecycleCore(ctx context.Context, sampleRunID string) (domain.SampleRunLifecycle, bool, error) {
-	if sampleRunID == "" {
-		return domain.SampleRunLifecycle{}, false, fmt.Errorf("sampleRunID is required: %w", ErrInvalidArgument)
+func (s *Service) GetRunLifecycleCore(ctx context.Context, runID string) (domain.RunLifecycle, bool, error) {
+	if runID == "" {
+		return domain.RunLifecycle{}, false, fmt.Errorf("runID is required: %w", ErrInvalidArgument)
 	}
-	return s.store.GetSampleRunLifecycle(ctx, sampleRunID)
+	return s.store.GetRunLifecycle(ctx, runID)
 }
 
-func (s *Service) refreshLifecycleSnapshot(ctx context.Context, lifecycle *domain.SampleRunLifecycle) error {
+func (s *Service) refreshLifecycleSnapshot(ctx context.Context, lifecycle *domain.RunLifecycle) error {
 	if lifecycle == nil {
 		return fmt.Errorf("lifecycle is required: %w", ErrInvalidArgument)
 	}
-	artifacts, err := s.store.ListArtifactsBySampleRun(ctx, lifecycle.SampleRunID)
+	artifacts, err := s.store.ListArtifactsByRun(ctx, lifecycle.RunID)
 	if err != nil {
 		return err
 	}
-	terminals, err := s.store.ListNodeTerminalsBySampleRun(ctx, lifecycle.SampleRunID)
+	terminals, err := s.store.ListNodeTerminalsByRun(ctx, lifecycle.RunID)
 	if err != nil {
 		return err
 	}
@@ -1024,7 +1082,7 @@ func (s *Service) refreshLifecycleSnapshot(ctx context.Context, lifecycle *domai
 	return nil
 }
 
-func estimateGCBacklogBytes(lifecycle domain.SampleRunLifecycle) int {
+func estimateGCBacklogBytes(lifecycle domain.RunLifecycle) int {
 	if !lifecycle.GCEligible || lifecycle.RetainedArtifactCount == 0 {
 		return 0
 	}
