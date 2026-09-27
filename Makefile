@@ -152,7 +152,7 @@ proto-check: buf
 	$(BUF) lint
 	$(BUF) breaking --against '.git#branch=main'
 	$(BUF) generate
-	git diff --exit-code -- api/proto/ahv1/
+	./scripts/proto-drift-check.sh
 
 preflight-ko-remote:
 	REMOTE_SSH_TARGET="$(REMOTE_SSH_TARGET)" REGISTRY_HOST="$(REGISTRY_HOST)" "$(PREFLIGHT_KO_REMOTE_SCRIPT)"
