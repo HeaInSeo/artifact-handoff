@@ -149,6 +149,7 @@ proto: buf
 	$(BUF) generate
 
 proto-check: buf
+	bash ./scripts/proto-drift-check-test.sh
 	$(BUF) lint
 	$(BUF) breaking --against '.git#branch=main'
 	$(BUF) generate

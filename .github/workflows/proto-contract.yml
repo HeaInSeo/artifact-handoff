@@ -54,6 +54,9 @@ jobs:
             buf breaking --against '.git#ref=HEAD~1'
           fi
 
+      - name: Self-test drift check scope
+        run: bash scripts/proto-drift-check-test.sh
+
       - name: Regenerate and check for drift
         run: |
           buf generate

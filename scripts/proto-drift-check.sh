@@ -11,8 +11,10 @@ gen_dir="api/proto/ahv1/"
 
 # Any output written outside the tracked directory means buf.gen.yaml no longer
 # maps go_package onto api/proto/ahv1/ (issue #30), so the diff below would
-# compare nothing.
-stray="$(git ls-files --others --exclude-standard)"
+# compare nothing. Only generated artifacts count: buf.gen.yaml's plugins emit
+# *.pb.go / *_grpc.pb.go, and the pathspec matches them at any depth. Unrelated
+# untracked files (local scratch, notes) are not buf output and are ignored.
+stray="$(git ls-files --others --exclude-standard -- '*.pb.go')"
 if [ -n "${stray}" ]; then
   echo "::error::buf generate produced untracked files; commit them or fix buf.gen.yaml output mapping:"
   echo "${stray}"
