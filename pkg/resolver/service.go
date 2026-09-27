@@ -276,11 +276,17 @@ func (s *Service) AddSourceCore(ctx context.Context, artifactID string, source d
 		return domain.ArtifactSource{}, err
 	}
 	if err := s.store.PutArtifactSources(ctx, artifactID, []domain.ArtifactSource{source}); err != nil {
+		if errors.Is(err, inventory.ErrSourceOwnershipConflict) {
+			return domain.ArtifactSource{}, fmt.Errorf("source %q belongs to another artifact: %w", source.SourceID, ErrAlreadyExists)
+		}
 		return domain.ArtifactSource{}, err
 	}
-	stored, _, err := s.store.GetArtifactSource(ctx, source.SourceID)
+	stored, ok, err := s.store.GetArtifactSource(ctx, source.SourceID)
 	if err != nil {
 		return domain.ArtifactSource{}, err
+	}
+	if !ok {
+		return domain.ArtifactSource{}, fmt.Errorf("source %q not found after write: %w", source.SourceID, ErrNotFound)
 	}
 	return stored, nil
 }

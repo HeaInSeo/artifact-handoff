@@ -118,6 +118,129 @@ func TestF1_LegacySourcesAreQuarantined(t *testing.T) {
 	}
 }
 
+// n1Source is an AddSource request that reuses sourceID for a live artifact.
+func n1Source(sourceID, uri string) domain.ArtifactSource {
+	return domain.ArtifactSource{
+		SourceID:  sourceID,
+		BackendID: "lab-http-cache",
+		Location:  domain.Location{HTTP: &domain.HTTPSource{URI: uri}},
+	}
+}
+
+// N1: AddSource through a live Run's artifact cannot rewrite a legacy source row by
+// reusing its source ID. The call fails as AlreadyExists (not a nil error with a zero
+// source) and the legacy row keeps its owner, state and location.
+func TestN1_AddSourceCannotOverwriteLegacySource(t *testing.T) {
+	ctx := context.Background()
+	path := seedPreF4SourcesDB(t)
+	store, err := inventory.NewSQLiteStore(path)
+	if err != nil {
+		t.Fatalf("open migrated store: %v", err)
+	}
+	svc := newTestService(t, store)
+	if _, err := svc.RegisterArtifact(ctx, r10Artifact("R1", "sha256:live")); err != nil {
+		t.Fatalf("register live R1: %v", err)
+	}
+	live, ok, err := svc.GetArtifact(ctx, "R1", "producer-a", "attempt-1", "dataset")
+	if err != nil || !ok {
+		t.Fatalf("get live R1: ok=%v err=%v", ok, err)
+	}
+
+	got, err := svc.AddSource(ctx, live.ArtifactID, n1Source("src-legacy", "http://artifact-source.local/hijack"))
+	if !errors.Is(err, ErrAlreadyExists) {
+		t.Fatalf("AddSource(reused legacy source id) = %+v, err %v; want ErrAlreadyExists", got, err)
+	}
+	if list, err := svc.ListSources(ctx, live.ArtifactID); err != nil {
+		t.Fatalf("ListSources(live): %v", err)
+	} else {
+		for _, s := range list {
+			if s.SourceID == "src-legacy" {
+				t.Fatalf("live artifact acquired the legacy source: %+v", s)
+			}
+		}
+	}
+	_ = store.Close()
+
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open raw: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM artifact_sources WHERE source_id = 'src-legacy'
+		AND artifact_id = ? AND state = 'ready' AND location_json LIKE '%/legacy"%'`, legacyArtifactID).Scan(&n); err != nil {
+		t.Fatalf("raw legacy source: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("legacy source rows untouched = %d, want 1 (owner/state/location rewritten)", n)
+	}
+}
+
+// N1: a source ID owned by Run R2's artifact cannot be rewritten through Run R1's
+// artifact, on either store.
+func TestN1_AddSourceCannotOverwriteOtherRunSource(t *testing.T) {
+	stores := map[string]func(t *testing.T) inventory.Store{
+		"memory": func(*testing.T) inventory.Store { return inventory.NewMemoryStore() },
+		"sqlite": func(t *testing.T) inventory.Store {
+			s, err := inventory.NewSQLiteStore(filepath.Join(t.TempDir(), "n1.db"))
+			if err != nil {
+				t.Fatalf("open sqlite: %v", err)
+			}
+			t.Cleanup(func() { _ = s.Close() })
+			return s
+		},
+	}
+	for name, open := range stores {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			svc := newTestService(t, open(t))
+			arts := map[string]domain.Artifact{}
+			for _, run := range []string{"R1", "R2"} {
+				if _, err := svc.RegisterArtifact(ctx, r10Artifact(run, "sha256:"+run)); err != nil {
+					t.Fatalf("register %s: %v", run, err)
+				}
+				a, ok, err := svc.GetArtifact(ctx, run, "producer-a", "attempt-1", "dataset")
+				if err != nil || !ok {
+					t.Fatalf("get %s: ok=%v err=%v", run, ok, err)
+				}
+				arts[run] = a
+			}
+			r2src, err := svc.AddSource(ctx, arts["R2"].ArtifactID, n1Source("src-shared", "http://artifact-source.local/r2"))
+			if err != nil {
+				t.Fatalf("add R2 source: %v", err)
+			}
+
+			got, err := svc.AddSource(ctx, arts["R1"].ArtifactID, n1Source("src-shared", "http://artifact-source.local/r1"))
+			if !errors.Is(err, ErrAlreadyExists) {
+				t.Fatalf("AddSource(R1, R2's source id) = %+v, err %v; want ErrAlreadyExists", got, err)
+			}
+			after, err := svc.ListSources(ctx, arts["R2"].ArtifactID)
+			if err != nil {
+				t.Fatalf("ListSources(R2): %v", err)
+			}
+			found := false
+			for _, s := range after {
+				if s.SourceID != "src-shared" {
+					continue
+				}
+				found = true
+				if s.ArtifactID != arts["R2"].ArtifactID || s.State != r2src.State ||
+					s.Location.HTTP == nil || s.Location.HTTP.URI != "http://artifact-source.local/r2" {
+					t.Fatalf("R2 source rewritten through R1: %+v", s)
+				}
+			}
+			if !found {
+				t.Fatal("R2 source disappeared")
+			}
+
+			// Re-adding a source through its own artifact still updates it.
+			if _, err := svc.AddSource(ctx, arts["R2"].ArtifactID, n1Source("src-shared", "http://artifact-source.local/r2")); err != nil {
+				t.Fatalf("idempotent re-add through the owner: %v", err)
+			}
+		})
+	}
+}
+
 // F1: sources follow Run identity — mutating R1's source never changes R2's sources of
 // the same Sample, and R1 becoming GC-eligible leaves R2's sources listed.
 func TestF1_SourcesAreRunScoped(t *testing.T) {

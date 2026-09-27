@@ -106,6 +106,15 @@ func (s *MemoryStore) ListArtifactsBySampleRun(_ context.Context, sampleRunID st
 func (s *MemoryStore) PutArtifactSources(_ context.Context, artifactID string, sources []domain.ArtifactSource) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// Check every source before writing any, so a conflicting call writes nothing.
+	for _, source := range sources {
+		if source.ArtifactID == "" {
+			source.ArtifactID = artifactID
+		}
+		if existing, ok := s.sources[source.SourceID]; ok && source.SourceID != "" && existing.ArtifactID != source.ArtifactID {
+			return fmt.Errorf("put artifact source %q for artifact %q: %w", source.SourceID, source.ArtifactID, ErrSourceOwnershipConflict)
+		}
+	}
 	for _, source := range sources {
 		if source.ArtifactID == "" {
 			source.ArtifactID = artifactID

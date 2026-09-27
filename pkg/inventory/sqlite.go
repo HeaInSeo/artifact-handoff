@@ -449,7 +449,10 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 		if source.ArtifactID == "" {
 			source.ArtifactID = artifactID
 		}
-		if _, err := tx.ExecContext(ctx, `
+		// The conflict update applies only to a row owned by the same artifact. A
+		// source ID owned by a legacy or another Run's artifact changes no row, and
+		// the whole call is rolled back as an ownership conflict.
+		res, err := tx.ExecContext(ctx, `
 			INSERT INTO artifact_sources (
 				source_id, artifact_id, backend_id, digest, state,
 				location_fingerprint, location_json, created_at, updated_at, last_verified_at, last_error
@@ -459,7 +462,8 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 				location_json = excluded.location_json,
 				updated_at = excluded.updated_at,
 				last_verified_at = excluded.last_verified_at,
-				last_error = excluded.last_error`,
+				last_error = excluded.last_error
+			WHERE artifact_sources.artifact_id = excluded.artifact_id`,
 			source.SourceID,
 			source.ArtifactID,
 			source.BackendID,
@@ -471,8 +475,16 @@ func (s *SQLiteStore) PutArtifactSources(ctx context.Context, artifactID string,
 			timeToStr(source.UpdatedAt),
 			timeToStr(source.LastVerifiedAt),
 			source.LastError,
-		); err != nil {
+		)
+		if err != nil {
 			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("put artifact source %q for artifact %q: %w", source.SourceID, source.ArtifactID, ErrSourceOwnershipConflict)
 		}
 	}
 	return tx.Commit()

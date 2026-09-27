@@ -2,11 +2,18 @@ package inventory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
 )
+
+// ErrSourceOwnershipConflict is returned by PutArtifactSources when a source ID is
+// already recorded for a different artifact (a legacy-unresolved artifact or another
+// Run's artifact). Nothing from that call is written: a source row never changes owner
+// and is never rewritten through another artifact.
+var ErrSourceOwnershipConflict = errors.New("source id is owned by another artifact")
 
 // Store is the backend-agnostic persistence contract.
 // Implementations: MemoryStore (tests / ephemeral), SQLiteStore (single-node persistence).
@@ -18,7 +25,9 @@ import (
 // identities. Pre-F4 rows that carry no RunID are legacy-unresolved: no method
 // returns them and nothing attributes them to a Run (they are never GC-evaluated).
 // Source reads (GetArtifactSource, ListArtifactSources) follow the same rule: a source
-// is returned only while its artifact is a live Run-keyed row.
+// is returned only while its artifact is a live Run-keyed row. Source writes
+// (PutArtifactSources) only update a source ID already owned by the same artifact;
+// otherwise the call fails with ErrSourceOwnershipConflict and writes nothing.
 type Store interface {
 	PutArtifact(ctx context.Context, artifact domain.Artifact) error
 	GetArtifact(ctx context.Context, runID, producerNodeID, attemptID, outputName string) (domain.Artifact, bool, error)
