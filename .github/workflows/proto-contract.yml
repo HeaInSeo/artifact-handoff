@@ -1,18 +1,10 @@
 name: Proto Contract
 
+# No paths filter: the job context "Proto Contract" is a required status check,
+# so it must report on every push and pull request.
 on:
   push:
-    paths:
-      - "api/proto/**"
-      - "buf.yaml"
-      - "buf.gen.yaml"
-      - ".github/workflows/proto-contract.yml"
   pull_request:
-    paths:
-      - "api/proto/**"
-      - "buf.yaml"
-      - "buf.gen.yaml"
-      - ".github/workflows/proto-contract.yml"
 
 permissions:
   contents: read
@@ -27,7 +19,7 @@ concurrency:
 
 jobs:
   proto-contract:
-    name: Lint, Breaking, Drift
+    name: Proto Contract
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -62,7 +54,8 @@ jobs:
             buf breaking --against '.git#ref=HEAD~1'
           fi
 
+      - name: Self-test drift check scope
+        run: bash scripts/proto-drift-check-test.sh
+
       - name: Regenerate and check for drift
-        run: |
-          buf generate
-          git diff --exit-code -- api/proto/ahv1/
+        run: ./scripts/proto-drift-check.sh

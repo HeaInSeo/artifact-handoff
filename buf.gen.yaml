@@ -1,15 +1,16 @@
 version: v2
 
-# paths=import derives output path from go_package option.
+# module= strips the go_package module prefix from the output path.
 # go_package = "github.com/HeaInSeo/artifact-handoff/api/proto/ahv1"
-# → outputs to api/proto/ahv1/ relative to repo root.
+# → outputs to api/proto/ahv1/ relative to repo root (the tracked files).
+# paths=import would write to ./github.com/HeaInSeo/... instead (issue #30).
 plugins:
   - local: protoc-gen-go
     out: .
     opt:
-      - paths=import
+      - module=github.com/HeaInSeo/artifact-handoff
 
   - local: protoc-gen-go-grpc
     out: .
     opt:
-      - paths=import
+      - module=github.com/HeaInSeo/artifact-handoff
