@@ -28,7 +28,7 @@ message ArtifactRef {
   string producer_attempt_id = 9;
   string logical_uri = 10;
   repeated ArtifactLocation locations = 11;
-  string run_id = 12;
+  int64 run_id = 12;
 }
 
 message RegisterArtifactRequest {
