@@ -18,7 +18,7 @@ type SQLiteStore struct {
 }
 
 func NewSQLiteStore(path string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", sqliteDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
@@ -28,10 +28,6 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(30 * time.Minute)
 	db.SetConnMaxIdleTime(5 * time.Minute)
-	if err := sqliteApplyPragmas(db); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("apply pragmas: %w", err)
-	}
 	if err := sqliteMigrate(db); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -39,18 +35,19 @@ func NewSQLiteStore(path string) (*SQLiteStore, error) {
 	return &SQLiteStore{db: db}, nil
 }
 
-func sqliteApplyPragmas(db *sql.DB) error {
-	for _, pragma := range []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA foreign_keys=OFF",
-	} {
-		if _, err := db.Exec(pragma); err != nil {
-			return fmt.Errorf("%s: %w", pragma, err)
-		}
+// sqliteDSN applies the connection pragmas to every connection the pool opens (a
+// connection recycled after ConnMaxLifetime/ConnMaxIdleTime gets them too) and
+// starts every transaction with BEGIN IMMEDIATE. A write transaction therefore
+// takes the write lock up front and waits up to busy_timeout for a writer in
+// another process, instead of failing its read→write upgrade with SQLITE_BUSY or
+// SQLITE_BUSY_SNAPSHOT (see TestSQLite_TwoProcessContention).
+func sqliteDSN(path string) string {
+	sep := "?"
+	if strings.Contains(path, "?") {
+		sep = "&"
 	}
-	return nil
+	return path + sep + "_txlock=immediate" +
+		"&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(OFF)"
 }
 
 func (s *SQLiteStore) Close() error { return s.db.Close() }
