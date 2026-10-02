@@ -45,6 +45,7 @@ func Run(t *testing.T, h Harness) {
 	t.Run("RecordNodeTerminalConvergence", func(t *testing.T) { testRecordNodeTerminalConvergence(t, h) })
 	t.Run("UpsertRunLifecycleConvergence", func(t *testing.T) { testUpsertRunLifecycleConvergence(t, h) })
 	t.Run("SourceOwnershipConflictZeroMutation", func(t *testing.T) { testSourceOwnershipConflict(t, h) })
+	t.Run("SourceRequiresLiveArtifact", func(t *testing.T) { testSourceRequiresLiveArtifact(t, h) })
 	t.Run("EmptyRunIDFailsClosed", func(t *testing.T) { testEmptyRunIDFailsClosed(t, h) })
 	t.Run("Reopen", func(t *testing.T) { testReopen(t, h) })
 	for _, c := range legacyCases {
@@ -191,6 +192,47 @@ func testSourceOwnershipConflict(t *testing.T, h Harness) {
 	}
 	if list, err := s.ListArtifactSources(ctx, owner.ArtifactID); err != nil || len(list) != 1 || !reflect.DeepEqual(list[0], owned) {
 		t.Fatalf("owner sources = %+v err=%v, want exactly the owned source", list, err)
+	}
+}
+
+// A source is returned only while its artifact is a live Run-keyed row. A source
+// stored before its artifact is invisible through both reads yet still owns its ID
+// (another artifact cannot claim it); once the artifact is stored, the same source
+// becomes visible unchanged.
+func testSourceRequiresLiveArtifact(t *testing.T, h Harness) {
+	ctx := context.Background()
+	s := h.New(t)
+	a, other := artifact(runA, digestOne), artifact(runB, digestOne)
+	pending := source("src-pending", a.ArtifactID, "/pending")
+	mustPutSources(t, s, a.ArtifactID, pending)
+	if got, ok, err := s.GetArtifactSource(ctx, pending.SourceID); ok || err != nil {
+		t.Fatalf("GetArtifactSource without artifact = %+v ok=%v err=%v, want not found", got, ok, err)
+	}
+	if list, err := s.ListArtifactSources(ctx, a.ArtifactID); err != nil || len(list) != 0 {
+		t.Fatalf("ListArtifactSources without artifact = %+v err=%v, want empty", list, err)
+	}
+
+	mustPutArtifact(t, s, other)
+	err := s.PutArtifactSources(ctx, other.ArtifactID, []domain.ArtifactSource{source(pending.SourceID, other.ArtifactID, "/hijack")})
+	if !errors.Is(err, inventory.ErrSourceOwnershipConflict) {
+		t.Fatalf("claiming an invisible source id: err=%v, want ErrSourceOwnershipConflict", err)
+	}
+	if list, err := s.ListArtifactSources(ctx, other.ArtifactID); err != nil || len(list) != 0 {
+		t.Fatalf("conflicting claim left sources on the other artifact: %+v err=%v", list, err)
+	}
+	// Liveness is judged per referenced artifact: a different live artifact must not
+	// make the pending source visible.
+	if got, ok, err := s.GetArtifactSource(ctx, pending.SourceID); ok || err != nil {
+		t.Fatalf("GetArtifactSource with only another artifact live = %+v ok=%v err=%v, want not found", got, ok, err)
+	}
+	if list, err := s.ListArtifactSources(ctx, a.ArtifactID); err != nil || len(list) != 0 {
+		t.Fatalf("ListArtifactSources with only another artifact live = %+v err=%v, want empty", list, err)
+	}
+
+	mustPutArtifact(t, s, a)
+	assertSource(t, s, pending)
+	if list, err := s.ListArtifactSources(ctx, a.ArtifactID); err != nil || len(list) != 1 || !reflect.DeepEqual(list[0], pending) {
+		t.Fatalf("ListArtifactSources once live = %+v err=%v, want exactly the pending source", list, err)
 	}
 }
 

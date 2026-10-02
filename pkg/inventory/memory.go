@@ -135,6 +135,9 @@ func (s *MemoryStore) ListArtifactSources(_ context.Context, artifactID string) 
 	defer s.mu.RUnlock()
 	idsForArtifact := s.sourcesByArtifactID[artifactID]
 	out := make([]domain.ArtifactSource, 0, len(idsForArtifact))
+	if !s.liveArtifactLocked(artifactID) {
+		return out, nil
+	}
 	for _, sourceID := range idsForArtifact {
 		source, ok := s.sources[sourceID]
 		if !ok {
@@ -149,7 +152,22 @@ func (s *MemoryStore) GetArtifactSource(_ context.Context, sourceID string) (dom
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	source, ok := s.sources[sourceID]
-	return source, ok, nil
+	if !ok || !s.liveArtifactLocked(source.ArtifactID) {
+		return domain.ArtifactSource{}, false, nil
+	}
+	return source, true, nil
+}
+
+// liveArtifactLocked reports whether artifactID names a live Run-keyed artifact, the
+// condition under which the Store contract returns its sources (SQLite:
+// liveSourceFilter). The caller holds s.mu.
+func (s *MemoryStore) liveArtifactLocked(artifactID string) bool {
+	for _, artifact := range s.artifacts {
+		if artifact.ArtifactID == artifactID && strings.TrimSpace(artifact.RunID) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *MemoryStore) ListNodeTerminalsByRun(_ context.Context, runID string) ([]domain.NodeTerminalRecord, error) {
