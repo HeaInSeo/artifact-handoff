@@ -131,6 +131,7 @@ func TestMemoryStore_ListArtifactsByRun(t *testing.T) {
 func TestMemoryStore_ArtifactSources_RoundTrip(t *testing.T) {
 	s := inventory.NewMemoryStore()
 	ctx := context.Background()
+	putLiveArtifact(t, s, "art-mem-src")
 
 	sources := []domain.ArtifactSource{
 		{
@@ -204,6 +205,7 @@ func TestMemoryStore_PutArtifactSources_EmptySourceIDSkipped(t *testing.T) {
 func TestMemoryStore_PutArtifactSources_BackfillsArtifactID(t *testing.T) {
 	s := inventory.NewMemoryStore()
 	ctx := context.Background()
+	putLiveArtifact(t, s, "art-fill")
 
 	// ArtifactID empty in source — should be filled from the artifactID argument
 	sources := []domain.ArtifactSource{
@@ -227,6 +229,7 @@ func TestMemoryStore_PutArtifactSources_BackfillsArtifactID(t *testing.T) {
 func TestMemoryStore_PutArtifactSources_Idempotent(t *testing.T) {
 	s := inventory.NewMemoryStore()
 	ctx := context.Background()
+	putLiveArtifact(t, s, "art-idem")
 
 	src := domain.ArtifactSource{
 		SourceID:   "src-idem",
@@ -576,8 +579,8 @@ func TestSQLiteStore_PutArtifact_ClearDigestRejected(t *testing.T) {
 	}
 }
 
-// putLiveArtifact stores a Run-keyed artifact with the given ID; SQLite returns a source
-// only while its artifact is live.
+// putLiveArtifact stores a Run-keyed artifact with the given ID; every Store returns a
+// source only while its artifact is live.
 func putLiveArtifact(t *testing.T, s inventory.Store, artifactID string) {
 	t.Helper()
 	if err := s.PutArtifact(context.Background(), domain.Artifact{
