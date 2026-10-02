@@ -12,12 +12,13 @@ import (
 )
 
 // LegacyRows is one legacy-unresolved row set, as a pre-F4 binary left it: an
-// artifact, its source and a node terminal, none of them carrying a RunID.
-// Harness.SeedLegacy writes it below the Store API.
+// artifact, its source, a node terminal and a Sample-keyed lifecycle, none of
+// them carrying a RunID. Harness.SeedLegacy writes it below the Store API.
 type LegacyRows struct {
-	Artifact domain.Artifact
-	Source   domain.ArtifactSource
-	Terminal domain.NodeTerminalRecord
+	Artifact  domain.Artifact
+	Source    domain.ArtifactSource
+	Terminal  domain.NodeTerminalRecord
+	Lifecycle domain.RunLifecycle
 }
 
 const (
@@ -26,14 +27,19 @@ const (
 )
 
 // legacyRows shares the Sample, producer, attempt and output of the live
-// fixtures, so only the RunID guard keeps it out of every read.
+// fixtures, so only the RunID guard keeps it out of every read. The legacy
+// lifecycle is finalized and GC-eligible, so attributing it to a live Run of
+// the Sample would change that Run's finalize/GC state.
 func legacyRows() LegacyRows {
 	a := artifact("", "sha256:legacy")
 	a.ArtifactID = legacyArtifactID
+	lc := lifecycle("", true)
+	lc.GCEligible, lc.GCEligibleAt = true, &at
 	return LegacyRows{
-		Artifact: a,
-		Source:   source(legacySourceID, legacyArtifactID, "/legacy"),
-		Terminal: terminal("", succeeded),
+		Artifact:  a,
+		Source:    source(legacySourceID, legacyArtifactID, "/legacy"),
+		Terminal:  terminal("", succeeded),
+		Lifecycle: lc,
 	}
 }
 
@@ -105,6 +111,35 @@ func checkLegacyInvisible(s inventory.Store, live ...domain.Artifact) error {
 	return nil
 }
 
+// checkLegacyLifecycleInvisible requires that the legacy lifecycle is neither
+// returned for an empty RunID nor attributed to a Run of its Sample: runA's
+// lifecycle is exactly liveA (or absent when liveA is nil), and the Sample
+// grouping lists only the live lifecycles.
+func checkLegacyLifecycleInvisible(s inventory.Store, liveA *domain.RunLifecycle) error {
+	ctx := context.Background()
+	if lc, ok, err := s.GetRunLifecycle(ctx, ""); ok || err != nil {
+		return fmt.Errorf("GetRunLifecycle(\"\") = %+v ok=%v err=%v, want not found", lc, ok, err)
+	}
+	got, ok, err := s.GetRunLifecycle(ctx, runA)
+	switch {
+	case err != nil:
+		return fmt.Errorf("GetRunLifecycle(%s): %w", runA, err)
+	case liveA == nil && ok:
+		return fmt.Errorf("GetRunLifecycle(%s) = %+v, want not found (legacy lifecycle attributed to a live Run)", runA, got)
+	case liveA != nil && (!ok || !reflect.DeepEqual(got, *liveA)):
+		return fmt.Errorf("GetRunLifecycle(%s) ok=%v\n got %+v\nwant %+v", runA, ok, got, *liveA)
+	}
+	var want []domain.RunLifecycle
+	if liveA != nil {
+		want = append(want, *liveA)
+	}
+	list, err := s.ListRunLifecyclesBySample(ctx, sampleRun)
+	if err != nil || len(list) != len(want) || (len(want) > 0 && !reflect.DeepEqual(list, want)) {
+		return fmt.Errorf("ListRunLifecyclesBySample = %+v err=%v, want only live %+v", list, err, want)
+	}
+	return nil
+}
+
 // checkLive requires the live artifact, its source and terminal to read back
 // exactly.
 func checkLive(s inventory.Store, a domain.Artifact, src domain.ArtifactSource, term domain.NodeTerminalRecord) error {
@@ -137,15 +172,23 @@ func legacyInvisible(t *testing.T, h Harness) error {
 	if err := checkLegacyInvisible(s, live); err != nil {
 		return fmt.Errorf("before reopen: %w", err)
 	}
-	if err := checkLegacyInvisible(h.Reopen(t, s), live); err != nil {
+	if err := checkLegacyLifecycleInvisible(s, nil); err != nil {
+		return fmt.Errorf("before reopen: %w", err)
+	}
+	s = h.Reopen(t, s)
+	if err := checkLegacyInvisible(s, live); err != nil {
+		return fmt.Errorf("after reopen: %w", err)
+	}
+	if err := checkLegacyLifecycleInvisible(s, nil); err != nil {
 		return fmt.Errorf("after reopen: %w", err)
 	}
 	return nil
 }
 
-// L2: reopening (and so re-running migration) is idempotent: legacy rows are
-// retained byte-for-byte, never deleted, backfilled or attributed, and live
-// data reads back unchanged, across repeated reopens.
+// L2: reopening (and so re-running migration) is idempotent: every persisted
+// column of the legacy rows is retained (per the backend's LegacySnapshot),
+// never deleted, backfilled or attributed, and live data reads back unchanged,
+// across repeated reopens.
 func legacyRetainedAcrossReopen(t *testing.T, h Harness) error {
 	requireLegacy(t, h, true)
 	ctx := context.Background()
@@ -153,6 +196,7 @@ func legacyRetainedAcrossReopen(t *testing.T, h Harness) error {
 	live := artifact(runA, digestOne)
 	owned := source("src-owned", live.ArtifactID, "/owner")
 	term := terminal(runA, succeeded)
+	liveLC := lifecycle(runA, false)
 	if err := s.PutArtifact(ctx, live); err != nil {
 		return fmt.Errorf("PutArtifact(live): %w", err)
 	}
@@ -161,6 +205,9 @@ func legacyRetainedAcrossReopen(t *testing.T, h Harness) error {
 	}
 	if err := s.RecordNodeTerminal(ctx, term); err != nil {
 		return fmt.Errorf("RecordNodeTerminal(live): %w", err)
+	}
+	if err := s.UpsertRunLifecycle(ctx, liveLC); err != nil {
+		return fmt.Errorf("UpsertRunLifecycle(live): %w", err)
 	}
 	snap, err := seedLegacy(t, h, s)
 	if err != nil {
@@ -176,6 +223,9 @@ func legacyRetainedAcrossReopen(t *testing.T, h Harness) error {
 			return fmt.Errorf("%s: %w", phase, err)
 		}
 		if err := checkLegacyInvisible(s, live); err != nil {
+			return fmt.Errorf("%s: %w", phase, err)
+		}
+		if err := checkLegacyLifecycleInvisible(s, &liveLC); err != nil {
 			return fmt.Errorf("%s: %w", phase, err)
 		}
 	}
