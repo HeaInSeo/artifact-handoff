@@ -220,6 +220,14 @@ func testSourceRequiresLiveArtifact(t *testing.T, h Harness) {
 	if list, err := s.ListArtifactSources(ctx, other.ArtifactID); err != nil || len(list) != 0 {
 		t.Fatalf("conflicting claim left sources on the other artifact: %+v err=%v", list, err)
 	}
+	// Liveness is judged per referenced artifact: a different live artifact must not
+	// make the pending source visible.
+	if got, ok, err := s.GetArtifactSource(ctx, pending.SourceID); ok || err != nil {
+		t.Fatalf("GetArtifactSource with only another artifact live = %+v ok=%v err=%v, want not found", got, ok, err)
+	}
+	if list, err := s.ListArtifactSources(ctx, a.ArtifactID); err != nil || len(list) != 0 {
+		t.Fatalf("ListArtifactSources with only another artifact live = %+v err=%v, want empty", list, err)
+	}
 
 	mustPutArtifact(t, s, a)
 	assertSource(t, s, pending)
