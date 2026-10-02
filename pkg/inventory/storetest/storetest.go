@@ -23,6 +23,15 @@ type Harness struct {
 	// process would see it. A backend without durable state leaves it nil and the
 	// Reopen case is skipped as NOT IMPLEMENTED rather than passed.
 	Reopen func(t *testing.T, s inventory.Store) inventory.Store
+	// SeedLegacy writes rows into s's durable state below the Store API, exactly
+	// as a pre-F4 binary would have left them (no RunID). A backend that cannot
+	// hold legacy rows leaves it nil and the Legacy cases are skipped as NOT
+	// IMPLEMENTED.
+	SeedLegacy func(t *testing.T, s inventory.Store, rows LegacyRows)
+	// LegacySnapshot returns a canonical dump of every legacy-unresolved row in
+	// s's durable state. Required with SeedLegacy; it proves legacy rows are
+	// retained and unmutated, since no Store read may return them.
+	LegacySnapshot func(t *testing.T, s inventory.Store) string
 }
 
 // Run executes every contract case against h.
@@ -38,6 +47,24 @@ func Run(t *testing.T, h Harness) {
 	t.Run("SourceOwnershipConflictZeroMutation", func(t *testing.T) { testSourceOwnershipConflict(t, h) })
 	t.Run("EmptyRunIDFailsClosed", func(t *testing.T) { testEmptyRunIDFailsClosed(t, h) })
 	t.Run("Reopen", func(t *testing.T) { testReopen(t, h) })
+	for _, c := range legacyCases {
+		t.Run(c.name, func(t *testing.T) {
+			if err := c.run(t, h); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// legacyCases return an error instead of failing t, so the suite can be
+// mutation-tested against deliberately broken stores.
+var legacyCases = []struct {
+	name string
+	run  func(t *testing.T, h Harness) error
+}{
+	{"Legacy/InvisibleAcrossReopen", legacyInvisible},
+	{"Legacy/RetainedIdempotentReopen", legacyRetainedAcrossReopen},
+	{"Legacy/SourceNotClaimableByLive", legacySourceNotClaimable},
 }
 
 // The same producer/attempt/output in two Runs of one Sample are two identities:
