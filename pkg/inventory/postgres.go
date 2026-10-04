@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 
 	"github.com/HeaInSeo/artifact-handoff/internal/ids"
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
+	"github.com/jackc/pgx/v5/stdlib" // also registers the "pgx" database/sql driver
 )
 
 // ProfileJ2Postgres is the explicit store profile of the PostgreSQL J2 transactional adapter
@@ -34,6 +36,12 @@ var ErrLifecycleUnsupported = errors.New("versionless run lifecycle upsert is un
 // is not the expected one. Nothing is written.
 var ErrLifecycleVersionConflict = errors.New("run lifecycle version conflict")
 
+// ErrCommitOutcomeUnknown is returned when COMMIT returned but the server warned while it was
+// in flight, e.g. a cancelled synchronous-replication wait. The transaction may be committed
+// locally without the required standby acknowledgement; callers must not treat it as success
+// and must re-read before retrying (TX1 C-1). It is not retried automatically.
+var ErrCommitOutcomeUnknown = errors.New("postgres commit outcome unknown")
+
 // postgresSchemaVersion is the schema this binary writes. A database stamped with a newer
 // version is refused before any mutation.
 const postgresSchemaVersion = 1
@@ -48,6 +56,8 @@ const maxSerializationRetries = 16
 // invalid UTF-8 included) and no collation, case folding or trimming applies.
 type PostgresStore struct {
 	db *sql.DB
+	// watches maps a *pgconn.PgConn whose COMMIT is in flight to its *commitWatch.
+	watches sync.Map
 }
 
 // NewPostgresStore opens the store at dsn and applies its schema. An empty DSN is an error.
@@ -55,15 +65,18 @@ func NewPostgresStore(ctx context.Context, dsn string) (*PostgresStore, error) {
 	if strings.TrimSpace(dsn) == "" {
 		return nil, errors.New("postgres store: DSN is required for the j2-postgres profile")
 	}
-	db, err := sql.Open("pgx", dsn)
+	cfg, err := pgx.ParseConfig(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open postgres: %w", err)
+		return nil, fmt.Errorf("parse postgres DSN: %w", err)
 	}
+	s := &PostgresStore{}
+	cfg.OnNotice = s.onNotice
+	db := stdlib.OpenDB(*cfg)
+	s.db = db
 	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("postgres store unavailable: %w", err)
 	}
-	s := &PostgresStore{db: db}
 	if err := s.migrate(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("migrate postgres store: %w", err)
@@ -174,8 +187,30 @@ func (s *PostgresStore) inTx(ctx context.Context, fn func(tx *sql.Tx) error) err
 	return fmt.Errorf("postgres store: giving up after %d serialization retries: %w", maxSerializationRetries, err)
 }
 
+// tryTx runs one attempt on one pinned connection so that a WARNING the server sends while
+// COMMIT is in flight can be attributed to this transaction. PostgreSQL answers a cancelled
+// synchronous-replication wait with "COMMIT" plus a WARNING ("canceling wait for synchronous
+// replication ... committed locally, but might not have been replicated"); that is not a
+// durable acknowledgement, so it is reported as ErrCommitOutcomeUnknown (TX1 C-1). Any WARNING
+// during COMMIT is treated the same way, which does not depend on the server's lc_messages.
 func (s *PostgresStore) tryTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
-	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	var pg *pgconn.PgConn
+	if err := conn.Raw(func(driverConn any) error {
+		c, ok := driverConn.(*stdlib.Conn)
+		if !ok {
+			return fmt.Errorf("postgres store: unexpected driver connection %T", driverConn)
+		}
+		pg = c.Conn().PgConn()
+		return nil
+	}); err != nil {
+		return err
+	}
+	tx, err := conn.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
 	if err != nil {
 		return err
 	}
@@ -183,7 +218,54 @@ func (s *PostgresStore) tryTx(ctx context.Context, fn func(tx *sql.Tx) error) er
 		_ = tx.Rollback()
 		return err
 	}
-	return tx.Commit()
+	w := s.watch(pg)
+	defer s.unwatch(pg)
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if n := w.warning(); n != nil {
+		return fmt.Errorf("%w: server warning during COMMIT: %s (%s)", ErrCommitOutcomeUnknown, n.Message, n.Detail)
+	}
+	return nil
+}
+
+// commitWatch records the first WARNING notice a connection receives while it is watched.
+type commitWatch struct {
+	mu   sync.Mutex
+	seen *pgconn.Notice
+}
+
+func (w *commitWatch) note(n *pgconn.Notice) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.seen == nil {
+		w.seen = n
+	}
+}
+
+func (w *commitWatch) warning() *pgconn.Notice {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.seen
+}
+
+func (s *PostgresStore) watch(pg *pgconn.PgConn) *commitWatch {
+	w := &commitWatch{}
+	s.watches.Store(pg, w)
+	return w
+}
+
+func (s *PostgresStore) unwatch(pg *pgconn.PgConn) { s.watches.Delete(pg) }
+
+// onNotice is installed on every pooled connection. Notices outside a watched COMMIT are
+// ignored.
+func (s *PostgresStore) onNotice(pg *pgconn.PgConn, n *pgconn.Notice) {
+	if !strings.EqualFold(n.SeverityUnlocalized, "WARNING") && !strings.EqualFold(n.Severity, "WARNING") {
+		return
+	}
+	if w, ok := s.watches.Load(pg); ok {
+		w.(*commitWatch).note(n)
+	}
 }
 
 func isRetryableSerialization(err error) bool {
