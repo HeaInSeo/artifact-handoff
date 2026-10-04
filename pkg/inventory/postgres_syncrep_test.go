@@ -27,6 +27,7 @@ func TestPostgres_SyncRepCancelIsNotSuccess(t *testing.T) {
 	t.Cleanup(func() { _ = admin.Close() })
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+	s := openPG(t, dsn) // migrate before synchronous replication is in effect
 
 	if _, err := admin.ExecContext(ctx, `ALTER SYSTEM SET synchronous_standby_names = 'ah_absent_standby'`); err != nil {
 		t.Skipf("ALTER SYSTEM not permitted (%v): sync-commit cancellation test NOT VERIFIED", err)
@@ -39,7 +40,6 @@ func TestPostgres_SyncRepCancelIsNotSuccess(t *testing.T) {
 		t.Fatalf("reload conf: %v", err)
 	}
 
-	s := openPG(t, dsn) // schema migration ran before sync replication is in effect
 	waitFor(ctx, t, "synchronous_standby_names to apply", func() bool {
 		var v string
 		return admin.QueryRowContext(ctx, `SHOW synchronous_standby_names`).Scan(&v) == nil && v == "ah_absent_standby"
