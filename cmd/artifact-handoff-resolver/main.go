@@ -19,12 +19,18 @@ import (
 func main() {
 	httpAddr := envOrDefault("AH_ADDR", ":8080")
 	grpcAddr := envOrDefault("AH_GRPC_ADDR", ":9090")
-	storeDSN := envOrDefault("AH_STORE_DSN", "memory")
-	if storeDSN == "memory" || storeDSN == "" {
+	storeProfile := os.Getenv("AH_STORE_PROFILE")
+	storeDSN := os.Getenv("AH_STORE_DSN")
+	if storeProfile == "" && storeDSN == "" {
+		storeDSN = "memory"
+	}
+	if storeProfile == "" && storeDSN == "memory" {
 		log.Printf("WARNING: AH_STORE_DSN not set or is 'memory' — data will not survive restarts")
 	}
 
-	store, closeStore, err := inventory.OpenStore(storeDSN)
+	openCtx, cancelOpen := context.WithTimeout(context.Background(), 30*time.Second)
+	store, closeStore, err := inventory.OpenStoreProfile(openCtx, storeProfile, storeDSN)
+	cancelOpen()
 	if err != nil {
 		log.Fatal(err)
 	}
