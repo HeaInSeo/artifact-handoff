@@ -84,6 +84,31 @@ func TestPostgres_RestoreActivationHold(t *testing.T) {
 	}
 }
 
+// TX1-07 (5): store tables without this store's schema stamp are a foreign schema: open is
+// refused and nothing is created or written.
+func TestPostgres_ForeignSchemaRefused(t *testing.T) {
+	dsn := pgSchemaDSN(t)
+	rawExec(t, dsn, `CREATE TABLE ah_artifacts (key text PRIMARY KEY, note text)`)
+	rawExec(t, dsn, `INSERT INTO ah_artifacts VALUES ('k', 'foreign row')`)
+	if s, err := inventory.NewPostgresStore(context.Background(), dsn); err == nil {
+		_ = s.Close()
+		t.Fatal("open over a foreign schema must be refused")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open raw connection: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	var stamped bool
+	if err := db.QueryRow(`SELECT to_regclass('ah_schema_meta') IS NOT NULL`).Scan(&stamped); err != nil || stamped {
+		t.Fatalf("refused open must create nothing: stamped=%v err=%v", stamped, err)
+	}
+	var note string
+	if err := db.QueryRow(`SELECT note FROM ah_artifacts WHERE key = 'k'`).Scan(&note); err != nil || note != "foreign row" {
+		t.Fatalf("foreign row must be untouched: %q err=%v", note, err)
+	}
+}
+
 // A store holding data without an activation record (e.g. a partial restore) is not a clean
 // bootstrap: it opens held, not active.
 func TestPostgres_DataWithoutActivationIsHeld(t *testing.T) {

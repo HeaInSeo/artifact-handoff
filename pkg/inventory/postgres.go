@@ -200,6 +200,18 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(7238194021)`); err != nil {
 			return err
 		}
+		// Store tables without this store's schema stamp were not created by this binary;
+		// adopting them could silently reinterpret foreign rows (TX1-07 (5)).
+		var foreign bool
+		if err := tx.QueryRowContext(ctx, `SELECT to_regclass('ah_schema_meta') IS NULL AND (
+			to_regclass('ah_artifacts') IS NOT NULL OR to_regclass('ah_artifact_sources') IS NOT NULL OR
+			to_regclass('ah_node_terminals') IS NOT NULL OR to_regclass('ah_run_lifecycles') IS NOT NULL OR
+			to_regclass('ah_store_activation') IS NOT NULL)`).Scan(&foreign); err != nil {
+			return fmt.Errorf("inspect schema: %w", err)
+		}
+		if foreign {
+			return errors.New("store tables exist without a schema stamp (foreign schema); refusing to open")
+		}
 		if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS ah_schema_meta (
 			key text PRIMARY KEY, value text NOT NULL)`); err != nil {
 			return err
