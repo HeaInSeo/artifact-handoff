@@ -42,6 +42,11 @@ var ErrLifecycleVersionConflict = errors.New("run lifecycle version conflict")
 // and must re-read before retrying (TX1 C-1). It is not retried automatically.
 var ErrCommitOutcomeUnknown = errors.New("postgres commit outcome unknown")
 
+// ErrRestoreActivationHold is returned by every PostgresStore mutation when the store's
+// activation does not belong to the database it runs on (restore, promoted standby) or is not
+// active. Nothing is written; reads keep working (TX1-04/TX1-07 (8)).
+var ErrRestoreActivationHold = errors.New("store activation hold: restore/failover activation evidence required")
+
 // postgresSchemaVersion is the schema this binary writes. A database stamped with a newer
 // version is refused before any mutation.
 const postgresSchemaVersion = 1
@@ -86,8 +91,111 @@ func NewPostgresStore(ctx context.Context, dsn string) (*PostgresStore, error) {
 
 func (s *PostgresStore) Close() error { return s.db.Close() }
 
+// pgIdentityQuery reads the physical identity a store activation is bound to: the cluster's
+// system identifier, the current WAL timeline (it changes on promotion and point-in-time
+// restore) and the database OID (it changes on a logical restore into a new database). It
+// fails on a standby, which is not writable anyway.
+const pgIdentityQuery = `SELECT
+	(SELECT system_identifier::text FROM pg_control_system()),
+	('x' || substr(pg_walfile_name(pg_current_wal_lsn()), 1, 8))::bit(32)::bigint,
+	(SELECT oid::bigint FROM pg_database WHERE datname = current_database())`
+
+type pgIdentity struct {
+	systemID   string
+	timeline   int64
+	databaseID int64
+}
+
+func readPGIdentity(ctx context.Context, tx *sql.Tx) (pgIdentity, error) {
+	var id pgIdentity
+	if err := tx.QueryRowContext(ctx, pgIdentityQuery).Scan(&id.systemID, &id.timeline, &id.databaseID); err != nil {
+		return pgIdentity{}, fmt.Errorf("read store identity: %w", err)
+	}
+	return id, nil
+}
+
+// activate records the store activation on first open. A brand-new store (every authoritative
+// table empty) is a clean bootstrap and becomes epoch 1, active, bound to this database's
+// identity. A store that already holds data but has no activation record was not created by
+// this binary's bootstrap (e.g. a partial restore), so it is recorded as held. An existing
+// record is never rewritten here: a restored record keeps its old identity and is refused by
+// requireActive. There is no automatic re-activation (TX1-04 RESTORE-ACTIVATION HOLD).
+func activate(ctx context.Context, tx *sql.Tx) error {
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM ah_store_activation)`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	var hasData bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM ah_artifacts)
+		OR EXISTS (SELECT 1 FROM ah_artifact_sources) OR EXISTS (SELECT 1 FROM ah_node_terminals)
+		OR EXISTS (SELECT 1 FROM ah_run_lifecycles)`).Scan(&hasData); err != nil {
+		return err
+	}
+	state := storeStateActive
+	if hasData {
+		state = storeStateRestoreHold
+	}
+	id, err := readPGIdentity(ctx, tx)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO ah_store_activation
+		(singleton, epoch, state, system_identifier, timeline_id, database_oid) VALUES (true, 1, $1, $2, $3, $4)`,
+		state, id.systemID, id.timeline, id.databaseID)
+	return err
+}
+
+const (
+	storeStateActive      = "active"
+	storeStateRestoreHold = "restore-hold"
+)
+
+// requireActive runs inside every mutation transaction. The store is writable only when its
+// activation record is active and bound to the database it is running on. A copy of the store
+// on another cluster, timeline or database — a restore or a promoted standby — is refused with
+// ErrRestoreActivationHold until activation is re-established with high-water and
+// old-primary fencing evidence, which this slice deliberately does not implement. Raising the
+// epoch alone does not lift the hold.
+func requireActive(ctx context.Context, tx *sql.Tx) error {
+	var state, systemID string
+	var epoch, timeline, databaseID int64
+	err := tx.QueryRowContext(ctx, `SELECT epoch, state, system_identifier, timeline_id, database_oid
+		FROM ah_store_activation WHERE singleton`).Scan(&epoch, &state, &systemID, &timeline, &databaseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: no activation record", ErrRestoreActivationHold)
+	}
+	if err != nil {
+		return fmt.Errorf("read store activation: %w", err)
+	}
+	if state != storeStateActive {
+		return fmt.Errorf("%w: epoch %d state %q", ErrRestoreActivationHold, epoch, state)
+	}
+	cur, err := readPGIdentity(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if cur != (pgIdentity{systemID: systemID, timeline: timeline, databaseID: databaseID}) {
+		return fmt.Errorf("%w: epoch %d was activated on system %s timeline %d database %d, now on system %s timeline %d database %d",
+			ErrRestoreActivationHold, epoch, systemID, timeline, databaseID, cur.systemID, cur.timeline, cur.databaseID)
+	}
+	return nil
+}
+
+// inTx runs a mutation: one SERIALIZABLE transaction that first checks the store activation.
+func (s *PostgresStore) inTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	return s.retryTx(ctx, func(tx *sql.Tx) error {
+		if err := requireActive(ctx, tx); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
 func (s *PostgresStore) migrate(ctx context.Context) error {
-	return s.inTx(ctx, func(tx *sql.Tx) error {
+	return s.retryTx(ctx, func(tx *sql.Tx) error {
 		// Serialize concurrent migrations of independent processes.
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(7238194021)`); err != nil {
 			return err
@@ -158,22 +266,31 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 				version        bigint NOT NULL CHECK (version > 0),
 				lifecycle_json bytea NOT NULL)`,
 			`CREATE INDEX IF NOT EXISTS ah_run_lifecycles_sample_run_id ON ah_run_lifecycles(sample_run_id)`,
+			`CREATE TABLE IF NOT EXISTS ah_store_activation (
+				singleton         boolean PRIMARY KEY CHECK (singleton),
+				epoch             bigint NOT NULL CHECK (epoch > 0),
+				state             text NOT NULL,
+				system_identifier text NOT NULL,
+				timeline_id       bigint NOT NULL,
+				database_oid      bigint NOT NULL)`,
 		} {
 			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
 			}
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO ah_schema_meta (key, value) VALUES ('schema_version', $1)
-			ON CONFLICT (key) DO NOTHING`, fmt.Sprintf("%d", postgresSchemaVersion))
-		return err
+		if _, err := tx.ExecContext(ctx, `INSERT INTO ah_schema_meta (key, value) VALUES ('schema_version', $1)
+			ON CONFLICT (key) DO NOTHING`, fmt.Sprintf("%d", postgresSchemaVersion)); err != nil {
+			return err
+		}
+		return activate(ctx, tx)
 	})
 }
 
-// inTx runs fn in one SERIALIZABLE transaction. On a serialization failure or deadlock the
+// retryTx runs fn in one SERIALIZABLE transaction. On a serialization failure or deadlock the
 // whole transaction is retried with the same frozen input, bounded by maxSerializationRetries
 // and ctx. Any other error, including a failed COMMIT, is returned as is: an uncertain commit
 // is never turned into success.
-func (s *PostgresStore) inTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+func (s *PostgresStore) retryTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
 	var err error
 	for range maxSerializationRetries {
 		if cerr := ctx.Err(); cerr != nil {
