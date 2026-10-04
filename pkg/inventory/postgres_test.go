@@ -97,6 +97,54 @@ func TestPostgres_RoundTripAndReopen(t *testing.T) {
 	}
 }
 
+// TX1-07 (2): the first writer commits and its ACK is lost (it goes away). A retry of the same
+// request through another store instance converges on the committed rows: no second row, no
+// new identity, and a different digest/state is still a conflict.
+func TestPostgres_AckLossRetryConverges(t *testing.T) {
+	dsn := pgSchemaDSN(t)
+	ctx := context.Background()
+	a := domain.Artifact{RunID: "run-ack", ProducerNodeID: "n", ProducerAttemptID: "a", OutputName: "o", ArtifactID: "art-ack", Digest: "sha256:ack"}
+	term := domain.NodeTerminalRecord{RunID: "run-ack", NodeID: "n", AttemptID: "a", TerminalState: "Succeeded"}
+	src := domain.ArtifactSource{SourceID: "src-ack", BackendID: "node-local-default", State: domain.SourceStateReady}
+
+	first := openPG(t, dsn)
+	if err := first.PutArtifact(ctx, a); err != nil {
+		t.Fatalf("first put: %v", err)
+	}
+	if err := first.RecordNodeTerminal(ctx, term); err != nil {
+		t.Fatalf("first terminal: %v", err)
+	}
+	if err := first.PutArtifactSources(ctx, "art-ack", []domain.ArtifactSource{src}); err != nil {
+		t.Fatalf("first sources: %v", err)
+	}
+	_ = first.Close() // the caller never saw the ACKs
+
+	retry := openPG(t, dsn)
+	if err := retry.PutArtifact(ctx, a); err != nil {
+		t.Fatalf("retried put: %v", err)
+	}
+	if err := retry.RecordNodeTerminal(ctx, term); err != nil {
+		t.Fatalf("retried terminal: %v", err)
+	}
+	if err := retry.PutArtifactSources(ctx, "art-ack", []domain.ArtifactSource{src}); err != nil {
+		t.Fatalf("retried sources: %v", err)
+	}
+	if list, err := retry.ListArtifactsByRun(ctx, "run-ack"); err != nil || len(list) != 1 {
+		t.Fatalf("artifacts after retry = %d err=%v, want 1", len(list), err)
+	}
+	if list, err := retry.ListNodeTerminalsByRun(ctx, "run-ack"); err != nil || len(list) != 1 {
+		t.Fatalf("terminals after retry = %d err=%v, want 1", len(list), err)
+	}
+	if list, err := retry.ListArtifactSources(ctx, "art-ack"); err != nil || len(list) != 1 {
+		t.Fatalf("sources after retry = %d err=%v, want 1", len(list), err)
+	}
+	other := term
+	other.TerminalState = "Failed"
+	if err := retry.RecordNodeTerminal(ctx, other); err == nil || !strings.Contains(err.Error(), "terminal state conflict") {
+		t.Fatalf("different terminal state after ACK loss: got %v", err)
+	}
+}
+
 // C-2: identities keep their exact bytes. NUL and invalid UTF-8 are distinct identities, not
 // rejected by the column type and not normalized.
 func TestPostgres_IdentityBytesExact(t *testing.T) {
