@@ -89,8 +89,8 @@ func testRunSeparation(t *testing.T, h Harness) {
 	mustPutArtifact(t, s, b)
 	mustRecordTerminal(t, s, terminal(runA, succeeded))
 	mustRecordTerminal(t, s, terminal(runB, failed))
-	mustUpsertLifecycle(t, h, s,lifecycle(runB, true))
-	mustUpsertLifecycle(t, h, s,lifecycle(runA, false))
+	mustUpsertLifecycle(t, h, s, lifecycle(runB, true))
+	mustUpsertLifecycle(t, h, s, lifecycle(runA, false))
 
 	assertArtifact(t, s, a)
 	assertArtifact(t, s, b)
@@ -162,10 +162,10 @@ func testRecordNodeTerminalConvergence(t *testing.T, h Harness) {
 func testUpsertRunLifecycleConvergence(t *testing.T, h Harness) {
 	ctx := context.Background()
 	s := h.New(t)
-	mustUpsertLifecycle(t, h, s,lifecycle(runA, false))
-	mustUpsertLifecycle(t, h, s,lifecycle(runA, false))
-	mustUpsertLifecycle(t, h, s,lifecycle(runB, false))
-	mustUpsertLifecycle(t, h, s,lifecycle(runA, true))
+	mustUpsertLifecycle(t, h, s, lifecycle(runA, false))
+	mustUpsertLifecycle(t, h, s, lifecycle(runA, false))
+	mustUpsertLifecycle(t, h, s, lifecycle(runB, false))
+	mustUpsertLifecycle(t, h, s, lifecycle(runA, true))
 	assertLifecycle(t, s, lifecycle(runA, true))
 	assertLifecycle(t, s, lifecycle(runB, false))
 	lcs, err := s.ListRunLifecyclesBySample(ctx, sampleRun)
@@ -297,7 +297,7 @@ func testReopen(t *testing.T, h Harness) {
 	mustPutArtifact(t, s, b)
 	mustPutSources(t, s, a.ArtifactID, owned)
 	mustRecordTerminal(t, s, terminal(runA, succeeded))
-	mustUpsertLifecycle(t, h, s,lifecycle(runA, true))
+	mustUpsertLifecycle(t, h, s, lifecycle(runA, true))
 
 	r := h.Reopen(t, s)
 	if r == s {
