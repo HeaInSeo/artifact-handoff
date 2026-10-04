@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"net/url"
 	"os"
 	"testing"
 	"time"
@@ -18,8 +20,14 @@ import (
 // ErrCommitOutcomeUnknown instead of success. It changes the server's
 // synchronous_standby_names (ALTER SYSTEM, superuser) for its duration, so it must not run
 // against a shared server; without the privilege it skips as NOT VERIFIED.
+//
+// The setting is server-wide: while it is in effect, commits from other test packages running
+// in parallel against the same server (e.g. storetest) wait on SyncRep too, until the cleanup
+// resets it. The store's connections therefore carry a unique application_name, and the test
+// cancels only its own waiting backend; cancelling another package's backend would leave this
+// store's COMMIT waiting and prove nothing.
 func TestPostgres_SyncRepCancelIsNotSuccess(t *testing.T) {
-	dsn := pgSchemaDSN(t)
+	dsn, appName := withApplicationName(t, pgSchemaDSN(t))
 	admin, err := sql.Open("pgx", os.Getenv(pgTestDSNEnv))
 	if err != nil {
 		t.Fatalf("open admin connection: %v", err)
@@ -51,9 +59,10 @@ func TestPostgres_SyncRepCancelIsNotSuccess(t *testing.T) {
 	go func() { errc <- s.PutArtifact(ctx, a) }()
 
 	var pid int
-	waitFor(ctx, t, "a backend waiting on SyncRep", func() bool {
+	waitFor(ctx, t, "this store's backend waiting on SyncRep", func() bool {
 		return admin.QueryRowContext(ctx,
-			`SELECT pid FROM pg_stat_activity WHERE wait_event = 'SyncRep' LIMIT 1`).Scan(&pid) == nil
+			`SELECT pid FROM pg_stat_activity WHERE wait_event = 'SyncRep' AND application_name = $1`,
+			appName).Scan(&pid) == nil
 	})
 	if _, err := admin.ExecContext(ctx, `SELECT pg_cancel_backend($1)`, pid); err != nil {
 		t.Fatalf("cancel sync wait: %v", err)
@@ -69,6 +78,21 @@ func TestPostgres_SyncRepCancelIsNotSuccess(t *testing.T) {
 		t.Fatalf("re-read: %v", err)
 	}
 	t.Logf("re-read after unknown outcome: present=%v (locally committed, not replicated)", ok)
+}
+
+// withApplicationName returns dsn with a unique application_name, so the test can find the
+// store's own backends in pg_stat_activity.
+func withApplicationName(t *testing.T, dsn string) (tagged, appName string) {
+	t.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("parse DSN: %v", err)
+	}
+	appName = fmt.Sprintf("ah_syncrep_%d", time.Now().UnixNano())
+	q := u.Query()
+	q.Set("application_name", appName)
+	u.RawQuery = q.Encode()
+	return u.String(), appName
 }
 
 func waitFor(ctx context.Context, t *testing.T, what string, cond func() bool) {
