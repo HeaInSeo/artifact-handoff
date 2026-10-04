@@ -32,6 +32,17 @@ type Harness struct {
 	// s's durable state. Required with SeedLegacy; it proves legacy rows are
 	// retained and unmutated, since no Store read may return them.
 	LegacySnapshot func(t *testing.T, s inventory.Store) string
+	// SetLifecycle writes a run lifecycle the way this backend supports it. nil means
+	// s.UpsertRunLifecycle. A backend that refuses the versionless upsert (the J2 store,
+	// TX1-05) supplies its fenced write here so the lifecycle contract still runs.
+	SetLifecycle func(ctx context.Context, s inventory.Store, lc domain.RunLifecycle) error
+}
+
+func (h Harness) setLifecycle(ctx context.Context, s inventory.Store, lc domain.RunLifecycle) error {
+	if h.SetLifecycle != nil {
+		return h.SetLifecycle(ctx, s, lc)
+	}
+	return s.UpsertRunLifecycle(ctx, lc)
 }
 
 // Run executes every contract case against h.
@@ -78,8 +89,8 @@ func testRunSeparation(t *testing.T, h Harness) {
 	mustPutArtifact(t, s, b)
 	mustRecordTerminal(t, s, terminal(runA, succeeded))
 	mustRecordTerminal(t, s, terminal(runB, failed))
-	mustUpsertLifecycle(t, s, lifecycle(runB, true))
-	mustUpsertLifecycle(t, s, lifecycle(runA, false))
+	mustUpsertLifecycle(t, h, s,lifecycle(runB, true))
+	mustUpsertLifecycle(t, h, s,lifecycle(runA, false))
 
 	assertArtifact(t, s, a)
 	assertArtifact(t, s, b)
@@ -151,10 +162,10 @@ func testRecordNodeTerminalConvergence(t *testing.T, h Harness) {
 func testUpsertRunLifecycleConvergence(t *testing.T, h Harness) {
 	ctx := context.Background()
 	s := h.New(t)
-	mustUpsertLifecycle(t, s, lifecycle(runA, false))
-	mustUpsertLifecycle(t, s, lifecycle(runA, false))
-	mustUpsertLifecycle(t, s, lifecycle(runB, false))
-	mustUpsertLifecycle(t, s, lifecycle(runA, true))
+	mustUpsertLifecycle(t, h, s,lifecycle(runA, false))
+	mustUpsertLifecycle(t, h, s,lifecycle(runA, false))
+	mustUpsertLifecycle(t, h, s,lifecycle(runB, false))
+	mustUpsertLifecycle(t, h, s,lifecycle(runA, true))
 	assertLifecycle(t, s, lifecycle(runA, true))
 	assertLifecycle(t, s, lifecycle(runB, false))
 	lcs, err := s.ListRunLifecyclesBySample(ctx, sampleRun)
@@ -248,7 +259,7 @@ func testEmptyRunIDFailsClosed(t *testing.T, h Harness) {
 		if err := s.RecordNodeTerminal(ctx, terminal(run, succeeded)); err == nil {
 			t.Fatalf("RecordNodeTerminal(RunID=%q) succeeded", run)
 		}
-		if err := s.UpsertRunLifecycle(ctx, lifecycle(run, true)); err == nil {
+		if err := h.setLifecycle(ctx, s, lifecycle(run, true)); err == nil {
 			t.Fatalf("UpsertRunLifecycle(RunID=%q) succeeded", run)
 		}
 		if _, ok, err := s.GetArtifact(ctx, run, node, attempt, output); ok || err != nil {
@@ -286,7 +297,7 @@ func testReopen(t *testing.T, h Harness) {
 	mustPutArtifact(t, s, b)
 	mustPutSources(t, s, a.ArtifactID, owned)
 	mustRecordTerminal(t, s, terminal(runA, succeeded))
-	mustUpsertLifecycle(t, s, lifecycle(runA, true))
+	mustUpsertLifecycle(t, h, s,lifecycle(runA, true))
 
 	r := h.Reopen(t, s)
 	if r == s {
