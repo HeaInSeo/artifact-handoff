@@ -200,29 +200,37 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(7238194021)`); err != nil {
 			return err
 		}
-		// Store tables without this store's schema stamp were not created by this binary;
-		// adopting them could silently reinterpret foreign rows (TX1-07 (5)).
-		var foreign bool
-		if err := tx.QueryRowContext(ctx, `SELECT to_regclass('ah_schema_meta') IS NULL AND (
+		var hasMeta, hasStoreTables bool
+		if err := tx.QueryRowContext(ctx, `SELECT to_regclass('ah_schema_meta') IS NOT NULL, (
 			to_regclass('ah_artifacts') IS NOT NULL OR to_regclass('ah_artifact_sources') IS NOT NULL OR
 			to_regclass('ah_node_terminals') IS NOT NULL OR to_regclass('ah_run_lifecycles') IS NOT NULL OR
-			to_regclass('ah_store_activation') IS NOT NULL)`).Scan(&foreign); err != nil {
+			to_regclass('ah_store_activation') IS NOT NULL)`).Scan(&hasMeta, &hasStoreTables); err != nil {
 			return fmt.Errorf("inspect schema: %w", err)
 		}
-		if foreign {
+		// The stamp is the schema_version row, not the metadata table: this binary creates the
+		// tables and the row in one transaction, so a store without the row was not created by it.
+		var current string
+		stamped := false
+		if hasMeta {
+			err := tx.QueryRowContext(ctx, `SELECT value FROM ah_schema_meta WHERE key = 'schema_version'`).Scan(&current)
+			switch {
+			case errors.Is(err, sql.ErrNoRows):
+			case err != nil:
+				return fmt.Errorf("read schema version: %w", err)
+			default:
+				stamped = true
+			}
+		}
+		// Store tables without this store's schema stamp were not created by this binary;
+		// adopting them could silently reinterpret foreign rows (TX1-07 (5)).
+		if hasStoreTables && !stamped {
 			return errors.New("store tables exist without a schema stamp (foreign schema); refusing to open")
 		}
 		if _, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS ah_schema_meta (
 			key text PRIMARY KEY, value text NOT NULL)`); err != nil {
 			return err
 		}
-		var current string
-		err := tx.QueryRowContext(ctx, `SELECT value FROM ah_schema_meta WHERE key = 'schema_version'`).Scan(&current)
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-		case err != nil:
-			return fmt.Errorf("read schema version: %w", err)
-		default:
+		if stamped {
 			var v int
 			if _, perr := fmt.Sscanf(current, "%d", &v); perr != nil {
 				return fmt.Errorf("unreadable schema version %q; refusing to open", current)

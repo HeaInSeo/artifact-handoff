@@ -109,6 +109,36 @@ func TestPostgres_ForeignSchemaRefused(t *testing.T) {
 	}
 }
 
+// TX1-07 (5): the stamp is the schema_version row, not the metadata table. Store tables whose
+// ah_schema_meta exists without that row (e.g. a partial restore) are refused, not re-stamped.
+func TestPostgres_MetaWithoutVersionRowRefused(t *testing.T) {
+	dsn := pgSchemaDSN(t)
+	s := openPG(t, dsn)
+	if err := s.PutArtifact(context.Background(), domain.Artifact{RunID: "run-1", ProducerNodeID: "n",
+		ProducerAttemptID: "a", OutputName: "o", ArtifactID: "art-1", Digest: "sha256:1"}); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	_ = s.Close()
+	rawExec(t, dsn, `DELETE FROM ah_schema_meta WHERE key = 'schema_version'`)
+
+	if s, err := inventory.NewPostgresStore(context.Background(), dsn); err == nil {
+		_ = s.Close()
+		t.Fatal("open over store tables without a schema_version row must be refused")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatalf("open raw connection: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	var rows int
+	if err := db.QueryRow(`SELECT count(*) FROM ah_schema_meta`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("refused open must not re-stamp: %d meta rows err=%v", rows, err)
+	}
+	if n := artifactCount(t, dsn); n != 1 {
+		t.Fatalf("refused open must write nothing: %d artifacts", n)
+	}
+}
+
 // A store holding data without an activation record (e.g. a partial restore) is not a clean
 // bootstrap: it opens held, not active.
 func TestPostgres_DataWithoutActivationIsHeld(t *testing.T) {
