@@ -16,8 +16,9 @@ import (
 var ErrSourceOwnershipConflict = errors.New("source id is owned by another artifact")
 
 // Store is the backend-agnostic persistence contract.
-// Implementations: MemoryStore (tests / ephemeral), SQLiteStore (single-node persistence).
-// Future backends (PostgreSQL, etcd) implement this interface without touching callers.
+// Implementations: MemoryStore (tests / ephemeral), SQLiteStore (single-node persistence),
+// PostgresStore (J2 profile, selected only by OpenStoreProfile; its versionless
+// UpsertRunLifecycle is unsupported, see CompareAndSetRunLifecycle).
 //
 // F4 Mode B: every identity lookup, terminal partition and lifecycle/GC scope is
 // keyed by RunID. SampleRunID is grouping metadata: ListArtifactsBySampleRun and
@@ -66,7 +67,31 @@ func OpenStore(dsn string) (Store, func(), error) {
 			return nil, nil, fmt.Errorf("open sqlite store %q: %w", path, err)
 		}
 		return s, func() { _ = s.Close() }, nil
+	case strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://"):
+		return nil, nil, fmt.Errorf("a PostgreSQL DSN requires the explicit %q store profile", ProfileJ2Postgres)
 	default:
 		return nil, nil, fmt.Errorf("unsupported store DSN %q (supported: memory, sqlite:<path>)", dsn)
+	}
+}
+
+// OpenStoreProfile selects the store by an explicit profile, independent of the DSN. An empty
+// profile keeps the OpenStore DSN behaviour. ProfileJ2Postgres opens only the PostgreSQL
+// store: a missing DSN, a non-PostgreSQL DSN or an unreachable database is an error, never a
+// fallback to the memory or SQLite store (TX1-06, C-4).
+func OpenStoreProfile(ctx context.Context, profile, dsn string) (Store, func(), error) {
+	switch profile {
+	case "":
+		return OpenStore(dsn)
+	case ProfileJ2Postgres:
+		if !strings.HasPrefix(dsn, "postgres://") && !strings.HasPrefix(dsn, "postgresql://") {
+			return nil, nil, fmt.Errorf("store profile %q requires a postgres:// DSN", ProfileJ2Postgres)
+		}
+		s, err := NewPostgresStore(ctx, dsn)
+		if err != nil {
+			return nil, nil, err
+		}
+		return s, func() { _ = s.Close() }, nil
+	default:
+		return nil, nil, fmt.Errorf("unsupported store profile %q (supported: %q)", profile, ProfileJ2Postgres)
 	}
 }

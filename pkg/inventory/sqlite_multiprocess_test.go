@@ -165,6 +165,17 @@ func TestSQLite_TwoProcessContention(t *testing.T) {
 
 func verifyContention(t *testing.T, path string, results []helperResult) {
 	t.Helper()
+	s, err := inventory.NewSQLiteStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+	verifyContentionOn(t, s, results)
+}
+
+// verifyContentionOn checks the two-process outcome against a reopened store of any backend.
+func verifyContentionOn(t *testing.T, s inventory.Store, results []helperResult) {
+	t.Helper()
 	terminalOutcome := map[string]string{} // "role/round" -> outcome
 	for _, r := range results {
 		switch {
@@ -175,11 +186,6 @@ func verifyContention(t *testing.T, path string, results []helperResult) {
 		}
 	}
 	ctx := context.Background()
-	s, err := inventory.NewSQLiteStore(path)
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	defer func() { _ = s.Close() }()
 	for i := range helperRounds {
 		got, ok, err := s.GetArtifact(ctx, sharedRun, "producer", "attempt-"+strconv.Itoa(i), "dataset")
 		if err != nil || !ok || got.Digest != sharedArtifact(i).Digest {

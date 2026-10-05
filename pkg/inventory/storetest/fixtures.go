@@ -79,9 +79,9 @@ func mustRecordTerminal(t *testing.T, s inventory.Store, r domain.NodeTerminalRe
 	}
 }
 
-func mustUpsertLifecycle(t *testing.T, s inventory.Store, lc domain.RunLifecycle) {
+func mustUpsertLifecycle(t *testing.T, h Harness, s inventory.Store, lc domain.RunLifecycle) {
 	t.Helper()
-	if err := s.UpsertRunLifecycle(context.Background(), lc); err != nil {
+	if err := h.setLifecycle(context.Background(), s, lc); err != nil {
 		t.Fatalf("UpsertRunLifecycle(%s): %v", lc.RunID, err)
 	}
 }

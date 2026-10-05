@@ -206,7 +206,7 @@ func legacyRetainedAcrossReopen(t *testing.T, h Harness) error {
 	if err := s.RecordNodeTerminal(ctx, term); err != nil {
 		return fmt.Errorf("RecordNodeTerminal(live): %w", err)
 	}
-	if err := s.UpsertRunLifecycle(ctx, liveLC); err != nil {
+	if err := h.setLifecycle(ctx, s, liveLC); err != nil {
 		return fmt.Errorf("UpsertRunLifecycle(live): %w", err)
 	}
 	snap, err := seedLegacy(t, h, s)
