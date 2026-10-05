@@ -1,14 +1,17 @@
 package inventory
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/HeaInSeo/artifact-handoff/internal/ids"
 	"github.com/HeaInSeo/artifact-handoff/pkg/domain"
@@ -231,8 +234,10 @@ func (s *PostgresStore) migrate(ctx context.Context) error {
 			return err
 		}
 		if stamped {
-			var v int
-			if _, perr := fmt.Sscanf(current, "%d", &v); perr != nil {
+			// The whole stamp must be the canonical decimal this binary writes; an integer
+			// prefix ("1-invalid"), padding or sign is an unreadable stamp, not version 1.
+			v, perr := strconv.Atoi(current)
+			if perr != nil || v < 1 || strconv.Itoa(v) != current {
 				return fmt.Errorf("unreadable schema version %q; refusing to open", current)
 			}
 			if v > postgresSchemaVersion {
@@ -424,10 +429,77 @@ func exactJSON(v any, what string) ([]byte, error) {
 	if err := json.Unmarshal(data, back.Interface()); err != nil {
 		return nil, fmt.Errorf("re-read %s: %w", what, err)
 	}
-	if !reflect.DeepEqual(back.Elem().Interface(), v) {
+	if !sameJSONValue(reflect.ValueOf(v), back.Elem()) {
 		return nil, fmt.Errorf("%s: %w", what, ErrIdentityUnsupported)
 	}
 	return data, nil
+}
+
+var timeType = reflect.TypeOf(time.Time{})
+
+// sameJSONValue reports whether b, decoded from the JSON encoding of a, holds the same value.
+// A time.Time is compared by instant and serialized form: JSON keeps both, but not the
+// monotonic reading or the Location name, which are not part of the stored value. Everything
+// else must be deeply equal, so a rewritten caller string is still refused.
+func sameJSONValue(a, b reflect.Value) bool {
+	if a.Type() != b.Type() {
+		return false
+	}
+	if a.Type() == timeType {
+		ta, tb := a.Interface().(time.Time), b.Interface().(time.Time)
+		ja, errA := ta.MarshalJSON()
+		jb, errB := tb.MarshalJSON()
+		return errA == nil && errB == nil && ta.Equal(tb) && bytes.Equal(ja, jb)
+	}
+	switch a.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if a.IsNil() || b.IsNil() {
+			return a.IsNil() == b.IsNil()
+		}
+		return sameJSONValue(a.Elem(), b.Elem())
+	case reflect.Struct:
+		for i := range a.NumField() {
+			if !a.Type().Field(i).IsExported() {
+				// JSON drops unexported fields, so only their zero value round-trips.
+				if !a.Field(i).IsZero() || !b.Field(i).IsZero() {
+					return false
+				}
+				continue
+			}
+			if !sameJSONValue(a.Field(i), b.Field(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Slice:
+		if a.IsNil() != b.IsNil() {
+			return false
+		}
+		fallthrough
+	case reflect.Array:
+		if a.Len() != b.Len() {
+			return false
+		}
+		for i := range a.Len() {
+			if !sameJSONValue(a.Index(i), b.Index(i)) {
+				return false
+			}
+		}
+		return true
+	case reflect.Map:
+		if a.IsNil() != b.IsNil() || a.Len() != b.Len() {
+			return false
+		}
+		for _, k := range a.MapKeys() {
+			bv := b.MapIndex(k)
+			if !bv.IsValid() || !sameJSONValue(a.MapIndex(k), bv) {
+				return false
+			}
+		}
+		return true
+	default:
+		return reflect.DeepEqual(a.Interface(), b.Interface())
+	}
 }
 
 func (s *PostgresStore) PutArtifact(ctx context.Context, a domain.Artifact) error {

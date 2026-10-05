@@ -139,6 +139,49 @@ func TestPostgres_MetaWithoutVersionRowRefused(t *testing.T) {
 	}
 }
 
+// TX1-07 (5): the whole schema_version stamp must be the canonical integer. An integer prefix
+// with junk, padding, sign or a non-positive value is unreadable: open is refused before any
+// table is (re)created, the stamp is not rewritten and no row changes.
+func TestPostgres_MalformedSchemaStampRefused(t *testing.T) {
+	for _, stamp := range []string{"1-invalid", "1x", "1 ", " 1", "+1", "01", "1.0", "", "0", "-1"} {
+		t.Run(stamp, func(t *testing.T) {
+			dsn := pgSchemaDSN(t)
+			s := openPG(t, dsn)
+			if err := s.PutArtifact(context.Background(), domain.Artifact{RunID: "run-1", ProducerNodeID: "n",
+				ProducerAttemptID: "a", OutputName: "o", ArtifactID: "art-1", Digest: "sha256:1"}); err != nil {
+				t.Fatalf("put: %v", err)
+			}
+			_ = s.Close()
+			db, err := sql.Open("pgx", dsn)
+			if err != nil {
+				t.Fatalf("open raw connection: %v", err)
+			}
+			defer func() { _ = db.Close() }()
+			if _, err := db.Exec(`UPDATE ah_schema_meta SET value = $1 WHERE key = 'schema_version'`, stamp); err != nil {
+				t.Fatalf("stamp %q: %v", stamp, err)
+			}
+			// A missing table makes any CREATE during the refused open observable.
+			rawExec(t, dsn, `DROP TABLE ah_run_lifecycles`)
+
+			if s, err := inventory.NewPostgresStore(context.Background(), dsn); err == nil {
+				_ = s.Close()
+				t.Fatalf("open with schema stamp %q must be refused", stamp)
+			}
+			var got string
+			if err := db.QueryRow(`SELECT value FROM ah_schema_meta WHERE key = 'schema_version'`).Scan(&got); err != nil || got != stamp {
+				t.Fatalf("refused open must not rewrite the stamp: %q err=%v", got, err)
+			}
+			var recreated bool
+			if err := db.QueryRow(`SELECT to_regclass('ah_run_lifecycles') IS NOT NULL`).Scan(&recreated); err != nil || recreated {
+				t.Fatalf("refused open must create nothing: recreated=%v err=%v", recreated, err)
+			}
+			if n := artifactCount(t, dsn); n != 1 {
+				t.Fatalf("refused open must write nothing: %d artifacts", n)
+			}
+		})
+	}
+}
+
 // A store holding data without an activation record (e.g. a partial restore) is not a clean
 // bootstrap: it opens held, not active.
 func TestPostgres_DataWithoutActivationIsHeld(t *testing.T) {

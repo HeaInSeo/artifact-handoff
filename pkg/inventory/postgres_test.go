@@ -237,6 +237,47 @@ func TestPostgres_LifecycleCASAndUnsupportedUpsert(t *testing.T) {
 	}
 }
 
+// C-2 applies to caller strings, not time.Time internals: a lifecycle stamped with time.Now()
+// (monotonic reading, Local) or a named non-UTC zone is stored with the same instant and
+// serialized value. A caller string JSON would rewrite is still refused and nothing is stored.
+func TestPostgres_LifecycleTimestampsAndMalformedStrings(t *testing.T) {
+	s := openPG(t, pgSchemaDSN(t))
+	ctx := context.Background()
+	now := time.Now()
+	seoul := now.In(time.FixedZone("KST", 9*60*60)).Add(time.Hour)
+	gc := now.Add(2 * time.Hour).UTC()
+	lc := domain.RunLifecycle{RunID: "r-time", SampleRunID: "s", Finalized: true, FinalizedAt: &now,
+		RetentionUntil: &seoul, GCEligibleAt: &gc}
+	v, err := s.CompareAndSetRunLifecycle(ctx, lc, 0)
+	if err != nil || v != 1 {
+		t.Fatalf("valid time.Now/non-UTC lifecycle refused: v=%d err=%v", v, err)
+	}
+	got, _, ok, err := s.GetRunLifecycleVersion(ctx, "r-time")
+	if err != nil || !ok {
+		t.Fatalf("read back: ok=%v err=%v", ok, err)
+	}
+	for _, pair := range [][2]*time.Time{{lc.FinalizedAt, got.FinalizedAt}, {lc.RetentionUntil, got.RetentionUntil}, {lc.GCEligibleAt, got.GCEligibleAt}} {
+		want, have := pair[0], pair[1]
+		if have == nil || !have.Equal(*want) || have.Format(time.RFC3339Nano) != want.Format(time.RFC3339Nano) {
+			t.Fatalf("timestamp changed: want %v, got %v", want, have)
+		}
+	}
+
+	for _, bad := range []domain.RunLifecycle{
+		{RunID: "r-bad-\xff", SampleRunID: "s"},
+		{RunID: "r-bad", SampleRunID: "s-\xff"},
+		{RunID: "r-bad", SampleRunID: "s", GCBlockedReason: "reason \xfe"},
+		{RunID: "r-bad", SampleRunID: "s", RetentionPolicySource: "policy\xc3"},
+	} {
+		if _, err := s.CompareAndSetRunLifecycle(ctx, bad, 0); !errors.Is(err, inventory.ErrIdentityUnsupported) {
+			t.Fatalf("%+q: want ErrIdentityUnsupported, got %v", bad.RunID+"|"+bad.SampleRunID, err)
+		}
+		if _, _, ok, _ := s.GetRunLifecycleVersion(ctx, bad.RunID); ok {
+			t.Fatalf("refused lifecycle %+q was stored", bad.RunID)
+		}
+	}
+}
+
 // TX1-07 (5): a database stamped by a newer binary is refused before any mutation.
 func TestPostgres_NewerSchemaRefused(t *testing.T) {
 	dsn := pgSchemaDSN(t)
